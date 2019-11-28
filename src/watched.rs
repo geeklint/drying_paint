@@ -107,8 +107,8 @@ impl<T> Deref for RefWatched<T> {
 
 impl<T> DerefMut for RefWatched<T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.meta.watched();
         self.meta.trigger();
+        self.meta.watched();
         &mut self.value
     }
 }

@@ -23,7 +23,7 @@ pub trait WatcherInit {
     fn init(watcher: &mut WatcherMeta<Self>);
 }
 
-pub struct Watcher<T: WatcherInit + ?Sized> {
+pub struct Watcher<T: ?Sized> {
     data: Rc<RefCell<T>>,
     meta: WatcherMeta<T>,
 }
@@ -39,14 +39,12 @@ impl<T: WatcherInit> Watcher<T> {
                 watches: Vec::new(),
             },
         };
-        this.init();
+        WatcherInit::init(&mut this.meta);
         this
     }
 }
 
 impl<T: WatcherInit + ?Sized> Watcher<T> {
-    fn init(&mut self) {
-        WatcherInit::init(&mut self.meta);
     }
 
     pub fn data(&mut self) -> &RefCell<T> { &self.data }

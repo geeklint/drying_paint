@@ -2,6 +2,9 @@
 mod trigger;
 use trigger::{Watch, WatchRef, WatchSet};
 
+mod context;
+pub use context::WatchContext;
+
 mod watched;
 pub use watched::{
     WatchedMeta, Watched, RefWatched, WatchedEvent
@@ -12,14 +15,12 @@ pub use watcher::{
     WatcherMeta, WatcherInit, Watcher
 };
 
-mod context;
-pub use context::WatchContext;
 
 #[macro_export]
 macro_rules! bind {
     ( $watcher:expr => $root:ident , $code:block ) => {
         {
-            WatcherMeta::watch($watcher, |$root| $code);
+            $crate::WatcherMeta::watch($watcher, |$root| $code);
         }
     };
 }
@@ -28,8 +29,8 @@ macro_rules! bind {
 macro_rules! bind_value {
     ( $watcher:expr => $root:ident , $target:expr , $source:expr ) => {
         {
-            bind!($watcher => $root, {
-                Watched::set(&mut $target, $source);
+            $crate::bind!($watcher => $root, {
+                $crate::Watched::set(&mut $target, $source);
             });
         }
     };
@@ -42,7 +43,7 @@ macro_rules! bind_event {
         $code:block ) => {
         {
             bind!($watcher => $root, {
-                if let Some($arg) = WatchedEvent::get_current(&$event)
+                if let Some($arg) = $crate::WatchedEvent::get_current(&mut $event)
                     $code
             });
         }
