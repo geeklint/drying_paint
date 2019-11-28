@@ -4,7 +4,7 @@ use trigger::{Watch, WatchRef, WatchSet};
 
 mod watched;
 pub use watched::{
-    WatchedMeta, Watched, RefWatched
+    WatchedMeta, Watched, RefWatched, WatchedEvent
 };
 
 mod watcher;
