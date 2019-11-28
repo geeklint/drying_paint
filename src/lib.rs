@@ -7,7 +7,7 @@ pub use context::WatchContext;
 
 mod watched;
 pub use watched::{
-    WatchedMeta, Watched, RefWatched, WatchedEvent
+    WatchedMeta, Watched, RefWatched
 };
 
 mod watcher;
@@ -15,6 +15,10 @@ pub use watcher::{
     WatcherMeta, WatcherInit, Watcher
 };
 
+mod event;
+pub use event::{
+    WatchedEvent
+};
 
 #[macro_export]
 macro_rules! bind {
@@ -184,12 +188,13 @@ mod tests {
         let mut ctx = WatchContext::new();
         ctx.with(|| {
             let mut item = EventCounter::new();
-            item.data_mut().add.dispatch(5);
-            item.data_mut().add.dispatch(3);
-            WatchContext::update_current();
             item.data_mut().add.dispatch(7);
             WatchContext::update_current();
-            assert_eq!(item.data().counter, 10);
+            assert_eq!(item.data().counter, 7);
+            item.data_mut().add.dispatch(9);
+            item.data_mut().add.dispatch(3);
+            WatchContext::update_current();
+            assert_eq!(item.data().counter, 19);
         });
     }
 }

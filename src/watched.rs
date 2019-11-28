@@ -118,25 +118,3 @@ impl<T: Default> Default for RefWatched<T> {
         RefWatched::new(Default::default())
     }
 }
-
-pub struct WatchedEvent<T> {
-    inner: Watched<Option<T>>,
-}
-
-impl<T> WatchedEvent<T> {
-    pub fn get_current(&self) -> Option<&T> {
-        self.inner.get_ref().as_ref()
-    }
-
-    pub fn dispatch(&mut self, arg: T) {
-        self.inner.set(Some(arg));
-    }
-}
-
-impl<T> Default for WatchedEvent<T> {
-    fn default() -> Self {
-        WatchedEvent {
-            inner: Watched::new(None),
-        }
-    }
-}
