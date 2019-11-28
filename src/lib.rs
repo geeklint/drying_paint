@@ -86,9 +86,9 @@ mod tests {
         let mut ctx = WatchContext::new();
         ctx.with(|| {
             let mut outer = Outer::new();
-            outer.data().borrow_mut().set_inner(37);
+            outer.data_mut().set_inner(37);
             WatchContext::update_current();
-            assert_eq!(outer.data().borrow().value.get(), 37);
+            assert_eq!(outer.data().value.get(), 37);
         });
     }
 
@@ -117,9 +117,9 @@ mod tests {
         let mut ctx = WatchContext::new();
         ctx.with(|| {
             let mut outer = MacroOuter::new();
-            outer.data().borrow_mut().set_inner(53);
+            outer.data_mut().set_inner(53);
             WatchContext::update_current();
-            assert_eq!(outer.data().borrow().value.get(), 53);
+            assert_eq!(outer.data().value.get(), 53);
         });
     }
 
@@ -144,12 +144,12 @@ mod tests {
         let mut ctx = WatchContext::new();
         ctx.with(|| {
             let mut item = EventCounter::new();
-            item.data().borrow_mut().add.dispatch(5);
-            item.data().borrow_mut().add.dispatch(3);
+            item.data_mut().add.dispatch(5);
+            item.data_mut().add.dispatch(3);
             WatchContext::update_current();
-            item.data().borrow_mut().add.dispatch(7);
+            item.data_mut().add.dispatch(7);
             WatchContext::update_current();
-            assert_eq!(item.data().borrow().counter, 10);
+            assert_eq!(item.data().counter, 10);
         });
     }
 }

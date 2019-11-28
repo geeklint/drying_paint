@@ -45,9 +45,13 @@ impl<T: WatcherInit> Watcher<T> {
 }
 
 impl<T: WatcherInit + ?Sized> Watcher<T> {
+    pub fn data(&self) -> std::cell::Ref<T> {
+        self.data.borrow()
     }
 
-    pub fn data(&mut self) -> &RefCell<T> { &self.data }
+    pub fn data_mut(&mut self) -> std::cell::RefMut<T> {
+        self.data.borrow_mut()
+    }
 }
 
 impl<T: WatcherInit + Default> Watcher<T> {
