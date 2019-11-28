@@ -123,6 +123,46 @@ mod tests {
         });
     }
 
+    #[derive(Default)]
+    struct RefInner {
+        value: RefWatched<(i32, i32)>,
+    }
+
+    type RefOuter = Watcher<RefOuterData>;
+
+    #[derive(Default)]
+    struct RefOuterData {
+        value: (i32, i32),
+        inner: RefInner,
+    }
+
+    impl RefOuterData {
+        fn set_inner(&mut self, value: (i32, i32)) {
+            self.inner.value.0 = value.0;
+            self.inner.value.1 = value.1;
+        }
+    }
+
+    impl WatcherInit for RefOuterData {
+        fn init(watcher: &mut WatcherMeta<Self>) {
+            bind!(watcher => root, {
+                root.value.0 = root.inner.value.1;
+                root.value.1 = root.inner.value.0;
+            });
+        }
+    }
+
+    #[test]
+    fn test_ref() {
+        let mut ctx = WatchContext::new();
+        ctx.with(|| {
+            let mut outer = RefOuter::new();
+            outer.data_mut().set_inner((11, 13));
+            WatchContext::update_current();
+            assert_eq!(outer.data().value, (13, 11));
+        });
+    }
+
     type EventCounter = Watcher<EventCounterData>;
 
     #[derive(Default)]
