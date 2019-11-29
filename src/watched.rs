@@ -27,7 +27,6 @@ impl WatchedMeta {
     }
 }
 
-
 pub struct Watched<T> {
     value: T,
     meta: WatchedMeta,
@@ -37,65 +36,9 @@ impl<T> Watched<T> {
     pub fn new(value: T) -> Self {
         Watched { value, meta: WatchedMeta::new() }
     }
-
-    pub fn set(&mut self, value: T) {
-        self.value = value;
-        self.meta.trigger();
-    }
-
-    pub fn get_ref(&self) -> &T {
-        self.meta.watched();
-        &self.value
-    }
-
-    pub fn replace(&mut self, mut value: T) -> T {
-        self.meta.watched();
-        std::mem::swap(&mut self.value, &mut value);
-        self.meta.trigger();
-        value
-    }
-
-    pub fn into_inner(self) -> T {
-        self.meta.watched();
-        self.value
-    }
 }
 
-impl<T: Copy> Watched<T> {
-    pub fn get(&self) -> T {
-        self.meta.watched();
-        self.value
-    }
-}
-
-impl<T: Default> Watched<T> {
-    pub fn take(&mut self) -> T {
-        self.meta.watched();
-        let mut value = Default::default();
-        std::mem::swap(&mut self.value, &mut value);
-        self.meta.trigger();
-        value
-    }
-}
-
-impl<T: Default> Default for Watched<T> {
-    fn default() -> Self {
-        Watched::new(Default::default())
-    }
-}
-
-pub struct RefWatched<T> {
-    value: T,
-    meta: WatchedMeta,
-}
-
-impl<T> RefWatched<T> {
-    pub fn new(value: T) -> Self {
-        RefWatched { value, meta: WatchedMeta::new() }
-    }
-}
-
-impl<T> Deref for RefWatched<T> {
+impl<T> Deref for Watched<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -105,7 +48,7 @@ impl<T> Deref for RefWatched<T> {
 }
 
 
-impl<T> DerefMut for RefWatched<T> {
+impl<T> DerefMut for Watched<T> {
     fn deref_mut(&mut self) -> &mut T {
         self.meta.trigger();
         self.meta.watched();
@@ -113,8 +56,8 @@ impl<T> DerefMut for RefWatched<T> {
     }
 }
 
-impl<T: Default> Default for RefWatched<T> {
+impl<T: Default> Default for Watched<T> {
     fn default() -> Self {
-        RefWatched::new(Default::default())
+        Watched::new(Default::default())
     }
 }

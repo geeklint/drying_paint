@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 
 use super::{
-    WatchedMeta, RefWatched,
+    WatchedMeta, Watched,
     WatcherInit, Watcher, WatcherMeta,
 };
 
@@ -22,7 +22,7 @@ fn with_container<T, F>(cell: &Cell<Container<T>>, func: F)
 
 struct AlternatingData<T> {
     queue: VecDeque<T>,
-    current: RefWatched<Cell<Container<T>>>,
+    current: Watched<Cell<Container<T>>>,
     off_frame: WatchedMeta,
 }
 
@@ -57,7 +57,7 @@ impl<T> Default for AlternatingData<T> {
     fn default() -> Self {
         AlternatingData {
             queue: VecDeque::new(),
-            current: RefWatched::new(Cell::new(Container::None)),
+            current: Watched::new(Cell::new(Container::None)),
             off_frame: WatchedMeta::new(),
         }
     }
