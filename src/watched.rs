@@ -61,3 +61,62 @@ impl<T: Default> Default for Watched<T> {
         Watched::new(Default::default())
     }
 }
+
+use std::fmt;
+
+impl<T: fmt::Debug> fmt::Debug for Watched<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&**self, f)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Watched<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<T: PartialEq> PartialEq for Watched<T> {
+    #[inline]
+    fn eq(&self, other: &Watched<T>) -> bool {
+        PartialEq::eq(&**self, &**other)
+    }
+    #[inline]
+    fn ne(&self, other: &Watched<T>) -> bool {
+        PartialEq::ne(&**self, &**other)
+    }
+}
+
+use core::cmp::Ordering;
+
+impl<T: PartialOrd> PartialOrd for Watched<T> {
+    #[inline]
+    fn partial_cmp(&self, other: &Watched<T>) -> Option<Ordering> {
+        PartialOrd::partial_cmp(&**self, &**other)
+    }
+    #[inline]
+    fn lt(&self, other: &Watched<T>) -> bool {
+        PartialOrd::lt(&**self, &**other)
+    }
+    #[inline]
+    fn le(&self, other: &Watched<T>) -> bool {
+        PartialOrd::le(&**self, &**other)
+    }
+    #[inline]
+    fn ge(&self, other: &Watched<T>) -> bool {
+        PartialOrd::ge(&**self, &**other)
+    }
+    #[inline]
+    fn gt(&self, other: &Watched<T>) -> bool {
+        PartialOrd::gt(&**self, &**other)
+    }
+}
+
+impl<T: Ord> Ord for Watched<T> {
+    #[inline]
+    fn cmp(&self, other: &Watched<T>) -> Ordering {
+        Ord::cmp(&**self, &**other)
+    }
+}
+
+impl<T: Eq> Eq for Watched<T> {}
