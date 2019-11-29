@@ -13,11 +13,11 @@ impl WatchedMeta {
     }
 
     pub fn watched(&self) {
-        WatchContext::expect_current(|ctx| {
+        WatchContext::try_get_current(|ctx| {
             if let Some(watch) = ctx.current_watch() {
                 self.watchers.borrow_mut().add(watch);
             }
-        }, "WatchedMeta.watched() called outside of WatchContext");
+        });
     }
 
     pub fn trigger(&mut self) {
