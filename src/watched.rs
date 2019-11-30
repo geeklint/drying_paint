@@ -5,7 +5,8 @@ use super::{WatchContext, WatchSet};
 
 /// This provides the basic functionality behind watched values. You can use
 /// it to provide functionality using the watch system for cases where
-/// Watched<T> and WatchedEvent<T> are not appropriate.
+/// [Watched](struct.Watched.html) and
+/// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
 pub struct WatchedMeta {
     watchers: RefCell<WatchSet>,
 }

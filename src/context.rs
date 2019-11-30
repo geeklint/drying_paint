@@ -13,16 +13,18 @@ thread_local! {
 /// The following will panic if done outside of a WatchContext:
 ///   * Calling WatchContext::update_current() (you can use
 /// WatchContext::update() to concisely update a context from outside itself).
-///   * Mutating a Watched<T> value.
-///   * Calling WatchedEvent::dispatch()
-///   * Calling WatchedMeta::trigger() (the two above are actually just
-/// specific variations on this)
-///   * Creating a Watcher<T>
+///   * Mutating a [Watched](struct.Watched.html) value.
+///   * Calling
+/// [WatchedEvent::dispatch()](struct.WatchedEvent.html#method.dispatch)
+///   * Calling
+/// [WatchedMeta::trigger()](struct.WatchedMeta.html#method.trigger) (the two
+/// above are actually just specific variations on this)
+///   * Creating a [Watcher](struct.Watcher.html)
 ///
 /// When a watched value changes, the code watching those values will be
 /// queued onto the WatchContext. WatchContext::update_current() will execute
 /// all pending operations.
-/// Note: Because Watcher<T> makes use of a RefCell internally to execute the
+/// Note: Because Watcher makes use of a RefCell internally to execute the
 /// watching code, you should not keep references gotten from Watcher::data()
 /// or Watcher::data_mut() around during WatchContext::update_current()
 /// or WatchContext::update().
@@ -55,7 +57,7 @@ impl WatchContext {
 
     /// Execute all operations which are currently pending because a value
     /// they were watching changed. 
-    /// Note: Because Watcher<T> makes use of a RefCell internally to execute
+    /// Note: Because Watcher makes use of a RefCell internally to execute
     /// the watching code, you should not keep references gotten from
     /// Watcher::data() or Watcher::data_mut() around during
     /// WatchContext::update_current() or WatchContext::update().

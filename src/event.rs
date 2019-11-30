@@ -64,9 +64,9 @@ impl<T> Default for AlternatingData<T> {
 }
 
 /// A WatchedEvent uses the watch system provided by this crate to implement
-/// an event disptacher. This is different from a watched value (Watched<T>)
-/// in that events will fire for each value passed to WatchedEvent::dispatch()
-/// and will not "store" the data.
+/// an event disptacher. This is different from a watched value
+/// ([Watched](struct.Watched.html)) in that events will fire for each value
+/// passed to WatchedEvent::dispatch() and will not "store" the data.
 /// A `bind_event` macro is provided for convience, and is the preferred way
 /// to watch an event:
 ///
