@@ -63,16 +63,62 @@ impl<T> Default for AlternatingData<T> {
     }
 }
 
+/// A WatchedEvent uses the watch system provided by this crate to implement
+/// an event disptacher. This is different from a watched value (Watched<T>)
+/// in that events will fire for each value passed to WatchedEvent::dispatch()
+/// and will not "store" the data.
+/// A `bind_event` macro is provided for convience, and is the preferred way
+/// to watch an event:
+///
+/// ```
+/// use drying_paint::*;
+///
+/// type EventCounter = Watcher<EventCounterData>;
+///
+/// #[derive(Default)]
+/// struct EventCounterData {
+///     counter: u32,
+///     add: WatchedEvent<u32>,
+/// }
+///
+/// impl WatcherInit for EventCounterData {
+///     fn init(watcher: &mut WatcherMeta<Self>) {
+///         bind_event!(watcher => root, root.add => amount, {
+///             root.counter += amount;
+///         });
+///     }
+/// }
+///
+/// fn main() {
+///     let mut ctx = WatchContext::new();
+///     ctx.with(|| {
+///         let mut item = EventCounter::new();
+///         item.data_mut().add.dispatch(7);
+///         WatchContext::update_current();
+///         assert_eq!(item.data().counter, 7);
+///         item.data_mut().add.dispatch(9);
+///         item.data_mut().add.dispatch(3);
+///         WatchContext::update_current();
+///         assert_eq!(item.data().counter, 19);
+///     });
+/// }
+/// ```
 pub struct WatchedEvent<T> {
     held_data: Option<T>,
     watcher: Watcher<AlternatingData<T>>,
 }
 
 impl<T: 'static> WatchedEvent<T> {
+    /// Create a new WatchedEvent
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// This method provides the raw functionality of listening to an event.
+    /// Normally, it is preferred to use the bind_event macro.
+    /// This returns a reference to the value passed to dispatch() when the
+    /// function is executing as a consequence of an event dispatch. When
+    /// initially binding, and in-between dispatches, it will return `None`.
     pub fn get_current(&mut self) -> Option<&T> {
         let mut hold = Container::Held;
         with_container(&self.watcher.data().current, |container| {
@@ -94,6 +140,7 @@ impl<T: 'static> WatchedEvent<T> {
         self.held_data.as_ref()
     }
 
+    /// Trigger the event. The argument passed will be delivered to listeners.
     pub fn dispatch(&mut self, arg: T) {
         let mut data = self.watcher.data_mut();
         data.queue.push_back(arg);

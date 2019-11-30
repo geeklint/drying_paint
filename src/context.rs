@@ -12,12 +12,20 @@ thread_local! {
 ///
 /// The following will panic if done outside of a WatchContext:
 ///   * Calling WatchContext::update_current() (you can use
-/// WatchContext::update() to update a context from outside itself).
+/// WatchContext::update() to concisely update a context from outside itself).
 ///   * Mutating a Watched<T> value.
 ///   * Calling WatchedEvent::dispatch()
 ///   * Calling WatchedMeta::trigger() (the two above are actually just
 /// specific variations on this)
 ///   * Creating a Watcher<T>
+///
+/// When a watched value changes, the code watching those values will be
+/// queued onto the WatchContext. WatchContext::update_current() will execute
+/// all pending operations.
+/// Note: Because Watcher<T> makes use of a RefCell internally to execute the
+/// watching code, you should not keep references gotten from Watcher::data()
+/// or Watcher::data_mut() around during WatchContext::update_current()
+/// or WatchContext::update().
 pub struct WatchContext {
     front_frame: RefCell<WatchSet>,
     back_frame: RefCell<WatchSet>,
@@ -34,6 +42,9 @@ impl WatchContext {
         }
     }
 
+    /// Set this WatchContext as the current one for the duration of the
+    /// passed function. Note that it is supported (although discouraged) to
+    /// nest WatchContexts within each other.
     pub fn with<F: FnOnce()>(&mut self, func: F) {
         CTX_STACK.with(|stack| {
             stack.borrow_mut().push(self as *const Self);
@@ -42,12 +53,23 @@ impl WatchContext {
         });
     }
 
+    /// Execute all operations which are currently pending because a value
+    /// they were watching changed. 
+    /// Note: Because Watcher<T> makes use of a RefCell internally to execute
+    /// the watching code, you should not keep references gotten from
+    /// Watcher::data() or Watcher::data_mut() around during
+    /// WatchContext::update_current() or WatchContext::update().
+    ///
+    /// # Panics
+    /// This function will panic if called outside of WatchContext::with, or
+    /// if any function queued for update panics.
     pub fn update_current() {
         Self::expect_current(|ctx| {
             ctx.internal_update();
         }, "WatchContext::update_current() called outside of WatchContext");
     }
 
+    /// The same as doing `context.with(|| WatchContext::update_current())`
     pub fn update(&mut self) {
         self.with(|| Self::update_current());
     }

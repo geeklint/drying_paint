@@ -3,15 +3,21 @@ use std::ops::{Deref, DerefMut};
 
 use super::{WatchContext, WatchSet};
 
+/// This provides the basic functionality behind watched values. You can use
+/// it to provide functionality using the watch system for cases where
+/// Watched<T> and WatchedEvent<T> are not appropriate.
 pub struct WatchedMeta {
     watchers: RefCell<WatchSet>,
 }
 
 impl WatchedMeta {
+    /// Create a new WatchedMeta instance
     pub fn new() -> Self {
         WatchedMeta { watchers: RefCell::new(WatchSet::new()) }
     }
 
+    /// When run in a function designed to watch a value, will bind so that
+    /// function will be re-run when this is triggered.
     pub fn watched(&self) {
         WatchContext::try_get_current(|ctx| {
             if let Some(watch) = ctx.current_watch() {
@@ -20,6 +26,10 @@ impl WatchedMeta {
         });
     }
 
+    /// Mark this value as having changed, so that watching functions will
+    /// be marked as needing to be updated.
+    /// # Panics
+    /// This function will panic if called outside of WatchContext::with
     pub fn trigger(&mut self) {
         WatchContext::expect_current(|ctx| {
             ctx.add_to_next(&mut self.watchers.borrow_mut());
@@ -27,12 +37,16 @@ impl WatchedMeta {
     }
 }
 
+/// This represents some value which will be interesting to watch. Watcher
+/// functions that reference this value will be re-run when this value
+/// changes.
 pub struct Watched<T> {
     value: T,
     meta: WatchedMeta,
 }
 
 impl<T> Watched<T> {
+    /// Create a new watched value.
     pub fn new(value: T) -> Self {
         Watched { value, meta: WatchedMeta::new() }
     }
