@@ -4,6 +4,12 @@ version = "0.1.0"
 authors = ["Violet <violet@geeklint.com>"]
 edition = "2018"
 
+description = "Implementation of observer pattern for Rust"
+repository = "https://github.com/geeklint/drying_paint"
+readme = "README"
+keywords = ["observer", "watch"]
+license = "MPL-2.0"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
