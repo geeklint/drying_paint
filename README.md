@@ -5,7 +5,7 @@ code whenever they change.
 The typical usage is as follows: you first define a structure to hold
 data, including some "watched" data.
 
-```
+```rust
 # use drying_paint::*;
 # type Hello = Watcher<HelloData>;
 #[derive(Default)]
@@ -34,7 +34,7 @@ struct HelloData {
 Implementing the trait WatcherInit for that structure gives you an place
 to set-up the code that should run when a watched value changes.
 
-```
+```rust
 # use drying_paint::*;
 # type Hello = Watcher<HelloData>;
 # #[derive(Default)]
@@ -62,7 +62,7 @@ impl WatcherInit for HelloData {
 
 Normally you need to wrap the data struct in a Watcher, so it's common
 to alias the watcher type to cleanup the syntax a bit:
-```
+```rust
 # use drying_paint::*;
 type Hello = Watcher<HelloData>;
 # #[derive(Default)]
@@ -91,7 +91,7 @@ Creating watchers and setting watched data needs to happen within a
 WatchContext. WatchContext::update_current() will cause all the pending
 watcher code to run.
 
-```
+```rust
 # use drying_paint::*;
 # type Hello = Watcher<HelloData>;
 # #[derive(Default)]

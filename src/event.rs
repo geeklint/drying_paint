@@ -74,7 +74,7 @@ impl<T> Default for AlternatingData<T> {
 /// A `bind_event` macro is provided for convience, and is the preferred way
 /// to watch an event:
 ///
-/// ```
+/// ```rust
 /// use drying_paint::*;
 ///
 /// type EventCounter = Watcher<EventCounterData>;
