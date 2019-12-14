@@ -8,7 +8,7 @@ use std::cell::{Cell, RefCell};
 use super::WatchContext;
 
 struct WatchData {
-    update_fn: Rc<Fn()>,
+    update_fn: Rc<dyn Fn()>,
     cycle: Cell<usize>,
 }
 
