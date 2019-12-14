@@ -36,15 +36,22 @@ pub struct WatchContext {
     front_frame: RefCell<WatchSet>,
     back_frame: RefCell<WatchSet>,
     watching_stack: RefCell<Vec<WatchRef>>,
+    frame_limit: Option<usize>,
 }
 
 impl WatchContext {
     /// Create a new WatchContext
     pub fn new() -> Self {
+        let frame_limit = if cfg!(debug_assertions) {
+            Some(16_384)
+        } else {
+            None
+        };
         WatchContext {
             front_frame: RefCell::new(WatchSet::new()),
             back_frame: RefCell::new(WatchSet::new()),
             watching_stack: RefCell::new(Vec::new()),
+            frame_limit,
         }
     }
 
@@ -69,7 +76,8 @@ impl WatchContext {
     ///
     /// # Panics
     /// This function will panic if called outside of WatchContext::with, or
-    /// if any function queued for update panics.
+    /// if any function queued for update panics or if the limit set by
+    /// set_frame_limit is exceeded.
     pub fn update_current() {
         Self::expect_current(|ctx| {
             ctx.internal_update();
@@ -99,9 +107,26 @@ impl WatchContext {
     }
 
     fn internal_update(&self) {
-        while !self.back_frame.borrow().empty() {
-            self.front_frame.swap(&self.back_frame);
-            self.front_frame.borrow_mut().trigger();
+        if let Some(mut frame_limit) = self.frame_limit {
+            while !self.back_frame.borrow().empty() {
+                if frame_limit == 0 {
+                    panic!("Updating a WatchContext exceeded it's \
+                    limit for iteration. This usually means there is a \
+                    recursive watch. You may be interested in \
+                    Watched::set_if_neq to resolve recursive watches. \
+                    If the number of iterations was intentional, you \
+                    can try increasing the limit with \
+                    WatchContext::set_frame_limit.");
+                }
+                self.front_frame.swap(&self.back_frame);
+                self.front_frame.borrow_mut().trigger();
+                frame_limit -= 1;
+            }
+        } else {
+            while !self.back_frame.borrow().empty() {
+                self.front_frame.swap(&self.back_frame);
+                self.front_frame.borrow_mut().trigger();
+            }
         }
     }
 
