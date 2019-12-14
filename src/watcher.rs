@@ -90,3 +90,9 @@ impl<T: WatcherInit + Default> Default for Watcher<T> {
         Watcher::create(Default::default())
     }
 }
+
+impl<T: WatcherInit + Clone> Clone for Watcher<T> {
+    fn clone(&self) -> Self {
+        Watcher::create(self.data.borrow().clone())
+    }
+}

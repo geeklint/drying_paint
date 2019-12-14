@@ -139,3 +139,13 @@ impl<T: Ord> Ord for Watched<T> {
 }
 
 impl<T: Eq> Eq for Watched<T> {}
+
+impl<T: Clone> Clone for Watched<T> {
+    fn clone(&self) -> Watched<T> {
+        Watched {
+            value: Clone::clone(&self.value),
+            meta: WatchedMeta::new(),
+        }
+    }
+}
+
