@@ -89,6 +89,44 @@ impl WatchContext {
         self.with(|| Self::update_current());
     }
 
+    /// Set the number of cycles this watch context will execute before
+    /// panicking. This is useful for catching bugs involving recursive
+    /// watches. None indicates no limit. The default behaviour is to provide
+    /// a high value for debug builds and no limit for release builds.
+    ///
+    /// # Examples
+    /// ```rust,should_panic
+    /// # use drying_paint::*;
+    /// #[derive(Default)]
+    /// struct KeepBalanced {
+    ///     left: Watched<i32>,
+    ///     right: Watched<i32>,
+    /// }
+    /// impl WatcherInit for KeepBalanced {
+    ///     fn init(watcher: &mut WatcherMeta<Self>) {
+    ///         watcher.watch(|root| {
+    ///             *root.left = *root.right;
+    ///         });
+    ///         watcher.watch(|root| {
+    ///             *root.right = *root.left;
+    ///         });
+    ///     }
+    /// }
+    /// fn main() {
+    ///     let mut ctx = WatchContext::new();
+    ///     ctx.set_frame_limit(Some(100));
+    ///     ctx.with(|| {
+    ///         let mut obj = Watcher::<KeepBalanced>::new();
+    ///         *obj.data_mut().left = 4;
+    ///         // because we used set_frame_limit, this will panic after
+    ///         // 100 iterations.
+    ///         WatchContext::update_current();
+    ///     });
+    /// }
+    pub fn set_frame_limit(&mut self, value: Option<usize>) {
+        self.frame_limit = value;
+    }
+
     pub(crate) fn expect_current<F: FnOnce(&WatchContext)>(func: F, msg: &str) {
         CTX_STACK.with(|stack| {
             let borrow = stack.borrow();
