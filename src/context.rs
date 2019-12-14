@@ -51,12 +51,13 @@ impl WatchContext {
     /// Set this WatchContext as the current one for the duration of the
     /// passed function. Note that it is supported (although discouraged) to
     /// nest WatchContexts within each other.
-    pub fn with<F: FnOnce()>(&mut self, func: F) {
+    pub fn with<R, F: FnOnce() -> R>(&mut self, func: F) -> R {
         CTX_STACK.with(|stack| {
             stack.borrow_mut().push(self as *const Self);
-            (func)();
+            let res = (func)();
             stack.borrow_mut().pop();
-        });
+            res
+        })
     }
 
     /// Execute all operations which are currently pending because a value
