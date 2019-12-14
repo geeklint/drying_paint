@@ -57,6 +57,52 @@ impl<T> Watched<T> {
     }
 }
 
+impl<T: PartialEq> Watched<T> {
+    /// This function provides a way to set a value for a watched value
+    /// only if is has changed.  This is useful for cases where setting a
+    /// value would otherwise cause an infinite loop.
+    ///
+    /// # Examples
+    /// The following example uses the watch system to keep two variables in
+    /// sync. This would normally cause an infinite loop as each update of
+    /// one would cause the other one to re-evaluate. However using set_if_neq
+    /// allows it to detect that the value is the same and stop propogating.
+    /// ```rust
+    /// # use drying_paint::*;
+    /// #[derive(Default)]
+    /// struct KeepBalanced {
+    ///     left: Watched<i32>,
+    ///     right: Watched<i32>,
+    /// }
+    /// impl WatcherInit for KeepBalanced {
+    ///     fn init(watcher: &mut WatcherMeta<Self>) {
+    ///         watcher.watch(|root| {
+    ///             Watched::set_if_neq(&mut root.left, *root.right);
+    ///         });
+    ///         watcher.watch(|root| {
+    ///             Watched::set_if_neq(&mut root.right, *root.left);
+    ///         });
+    ///     }
+    /// }
+    /// fn main() {
+    ///     let mut ctx = WatchContext::new();
+    ///     ctx.set_frame_limit(Some(100));
+    ///     ctx.with(|| {
+    ///         let mut obj = Watcher::<KeepBalanced>::new();
+    ///         *obj.data_mut().left = 68;
+    ///         WatchContext::update_current();
+    ///         assert_eq!(*obj.data().right, 68);
+    ///     });
+    /// }
+    pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
+        if wrapper.value != value {
+            wrapper.value = value;
+            wrapper.meta.trigger();
+            wrapper.meta.watched();
+        }
+    }
+}
+
 impl<T> Deref for Watched<T> {
     type Target = T;
 
