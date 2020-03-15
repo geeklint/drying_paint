@@ -96,3 +96,27 @@ impl<T: WatcherInit + Clone> Clone for Watcher<T> {
         Watcher::create(self.data.borrow().clone())
     }
 }
+
+impl<T: 'static> Watcher<T> {
+    /// Get a value representing a unique id for this watcher. This value
+    /// may outlive the watcher, and will never compare equal to a value
+    /// returned by the id method of a Watcher other than this one.
+    pub fn id(&self) -> WatcherId {
+        WatcherId {
+            ptr: Rc::downgrade(&self.data) as Weak<dyn std::any::Any>,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct WatcherId {
+    ptr: Weak<dyn std::any::Any>,
+}
+
+impl PartialEq for WatcherId {
+    fn eq(&self, other: &WatcherId) -> bool {
+        self.ptr.ptr_eq(&other.ptr)
+    }
+}
+
+impl Eq for WatcherId {}
