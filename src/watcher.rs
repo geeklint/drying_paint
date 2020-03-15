@@ -108,6 +108,10 @@ impl<T: 'static> Watcher<T> {
     }
 }
 
+/// A type representing a unique id for a particular instance
+/// of a watcher. This value may outlive the watcher, and will never
+/// compare equal to a value returned by the id method of a Watcher
+/// other than this one.
 #[derive(Clone)]
 pub struct WatcherId {
     ptr: Weak<dyn std::any::Any>,

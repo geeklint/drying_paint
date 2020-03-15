@@ -137,7 +137,7 @@ pub use watched::{
 
 mod watcher;
 pub use watcher::{
-    WatcherMeta, WatcherInit, Watcher
+    WatcherMeta, WatcherInit, Watcher, WatcherId
 };
 
 mod event;
