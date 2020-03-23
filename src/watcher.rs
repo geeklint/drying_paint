@@ -124,3 +124,9 @@ impl PartialEq for WatcherId {
 }
 
 impl Eq for WatcherId {}
+
+impl std::fmt::Debug for WatcherId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(WatcherId)")
+    }
+}
