@@ -8,6 +8,7 @@ use std::cell::{Cell, RefCell};
 use super::WatchContext;
 
 struct WatchData {
+    // can this be a Box instead? why did I make it an Rc?
     update_fn: Rc<dyn Fn()>,
     cycle: Cell<usize>,
 }

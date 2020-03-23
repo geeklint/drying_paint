@@ -15,6 +15,13 @@ pub struct WatcherMeta<T: ?Sized> {
     watches: Vec<Watch>,
 }
 
+impl <T: 'static> WatcherMeta<T> {
+    pub fn id(&self) -> WatcherId {
+        WatcherId {
+            ptr: self.data.clone() as Weak<dyn std::any::Any>,
+        }
+    }
+}
 
 impl<T: ?Sized + 'static> WatcherMeta<T> {
     /// Use this to set up a function which should be re-run whenever watched

@@ -236,4 +236,33 @@ mod tests {
         });
     }
 
+    #[derive(Default)]
+    struct InnerId {
+        value: Option<WatcherId>,
+    }
+
+    impl WatcherInit for InnerId {
+        fn init(watcher: &mut WatcherMeta<Self>) {
+            let id = watcher.id();
+            watcher.watch(move |root| {
+                root.value = Some(id.clone());
+            });
+        }
+    }
+
+    #[test]
+    fn test_meta_id() {
+        let mut ctx = WatchContext::new();
+        ctx.with(|| {
+            let watcher: Watcher<InnerId> = Watcher::new();
+            let watcher_id = Some(watcher.id());
+            assert_eq!(watcher.data().value, watcher_id);
+
+            let other: Watcher<InnerId> = Watcher::new();
+            let other_id = Some(other.id());
+            assert_ne!(other.data().value, watcher_id);
+            assert_ne!(watcher.data().value, other_id);
+        });
+    }
+
 }
