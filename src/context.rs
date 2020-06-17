@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use super::{WatchSet, WatchRef};
 
 thread_local! {
-    static CTX_STACK: RefCell<Vec<*const WatchContext>> = RefCell::new(Vec::new());
+    static CTX_STACK: RefCell<Vec<WatchContext>> = RefCell::new(Vec::new());
 }
 
 /// Most of the functions in this crate require that they are executing in
@@ -58,12 +58,11 @@ impl WatchContext {
     /// Set this WatchContext as the current one for the duration of the
     /// passed function. Note that it is supported (although discouraged) to
     /// nest WatchContexts within each other.
-    pub fn with<R, F: FnOnce() -> R>(&mut self, func: F) -> R {
+    pub fn with<R, F: FnOnce() -> R>(self, func: F) -> (Self, R) {
         CTX_STACK.with(|stack| {
-            stack.borrow_mut().push(self as *const Self);
+            stack.borrow_mut().push(self);
             let res = (func)();
-            stack.borrow_mut().pop();
-            res
+            (stack.borrow_mut().pop().unwrap(), res)
         })
     }
 
@@ -85,8 +84,8 @@ impl WatchContext {
     }
 
     /// The same as doing `context.with(|| WatchContext::update_current())`
-    pub fn update(&mut self) {
-        self.with(|| Self::update_current());
+    pub fn update(self) -> Self {
+        self.with(|| Self::update_current()).0
     }
 
     /// Set the number of cycles this watch context will execute before
@@ -115,13 +114,13 @@ impl WatchContext {
     /// fn main() {
     ///     let mut ctx = WatchContext::new();
     ///     ctx.set_frame_limit(Some(100));
-    ///     ctx.with(|| {
+    ///     ctx = ctx.with(|| {
     ///         let mut obj = Watcher::<KeepBalanced>::new();
     ///         *obj.data_mut().left = 4;
     ///         // because we used set_frame_limit, this will panic after
     ///         // 100 iterations.
     ///         WatchContext::update_current();
-    ///     });
+    ///     }).0;
     /// }
     pub fn set_frame_limit(&mut self, value: Option<usize>) {
         self.frame_limit = value;
@@ -130,8 +129,7 @@ impl WatchContext {
     pub(crate) fn expect_current<F: FnOnce(&WatchContext)>(func: F, msg: &str) {
         CTX_STACK.with(|stack| {
             let borrow = stack.borrow();
-            let ptr = borrow.last().expect(msg);
-            (func)(unsafe { ptr.as_ref().unwrap() });
+            (func)(borrow.last().expect(msg));
         });
     }
 
@@ -139,7 +137,7 @@ impl WatchContext {
         CTX_STACK.with(|stack| {
             let borrow = stack.borrow();
             if let Some(ptr) = borrow.last() {
-                (func)(unsafe { ptr.as_ref().unwrap() });
+                (func)(ptr);
             }
         });
     }

@@ -26,12 +26,12 @@
 //! # }
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
-//! #     ctx.with(|| {
+//! #     ctx = ctx.with(|| {
 //! #         let mut obj = Hello::new();
 //! #         *obj.data_mut().name = "Rust".to_string();
 //! #         WatchContext::update_current();
 //! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #     });
+//! #     }).0;
 //! # }
 //! ```
 //!
@@ -55,12 +55,12 @@
 //! }
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
-//! #     ctx.with(|| {
+//! #     ctx = ctx.with(|| {
 //! #         let mut obj = Hello::new();
 //! #         *obj.data_mut().name = "Rust".to_string();
 //! #         WatchContext::update_current();
 //! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #     });
+//! #     }).0;
 //! # }
 //! ```
 //!
@@ -83,12 +83,12 @@
 //! # }
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
-//! #     ctx.with(|| {
+//! #     ctx = ctx.with(|| {
 //! #         let mut obj = Hello::new();
 //! #         *obj.data_mut().name = "Rust".to_string();
 //! #         WatchContext::update_current();
 //! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #     });
+//! #     }).0;
 //! # }
 //! ```
 //! Creating watchers and setting watched data needs to happen within a 
@@ -112,12 +112,12 @@
 //! # }
 //! fn main() {
 //!     let mut ctx = WatchContext::new();
-//!     ctx.with(|| {
+//!     ctx = ctx.with(|| {
 //!         let mut obj = Hello::new();
 //!         *obj.data_mut().name = "Rust".to_string();
 //!         WatchContext::update_current();
 //!         assert_eq!(obj.data().greeting, "Hello, Rust!");
-//!     });
+//!     }).0;
 //! }
 //! ```
 
@@ -168,7 +168,7 @@ pub use event::{
 ///
 /// fn main() {
 ///     let mut ctx = WatchContext::new();
-///     ctx.with(|| {
+///     ctx = ctx.with(|| {
 ///         let mut item = EventCounter::new();
 ///         item.data_mut().add.dispatch(7);
 ///         WatchContext::update_current();
@@ -177,7 +177,7 @@ pub use event::{
 ///         item.data_mut().add.dispatch(3);
 ///         WatchContext::update_current();
 ///         assert_eq!(item.data().counter, 19);
-///     });
+///     }).0;
 /// }
 /// ```
 #[macro_export]
@@ -228,12 +228,12 @@ mod tests {
     #[test]
     fn test_propogate() {
         let mut ctx = WatchContext::new();
-        ctx.with(|| {
+        ctx = ctx.with(|| {
             let mut outer = Outer::new();
             outer.data_mut().set_inner(37);
             WatchContext::update_current();
             assert_eq!(outer.data().value, 37);
-        });
+        }).0;
     }
 
     #[derive(Default)]
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn test_meta_id() {
         let mut ctx = WatchContext::new();
-        ctx.with(|| {
+        ctx = ctx.with(|| {
             let watcher: Watcher<InnerId> = Watcher::new();
             let watcher_id = Some(watcher.id());
             assert_eq!(watcher.data().value, watcher_id);
@@ -262,7 +262,7 @@ mod tests {
             let other_id = Some(other.id());
             assert_ne!(other.data().value, watcher_id);
             assert_ne!(watcher.data().value, other_id);
-        });
+        }).0;
     }
 
 }
