@@ -137,3 +137,26 @@ impl std::fmt::Debug for WatcherId {
         write!(f, "(WatcherId)")
     }
 }
+
+#[cfg(feature = "serde")]
+impl<T: serde::Serialize> serde::Serialize for Watcher<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer
+    {
+        T::serialize(&self.data.borrow(), serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T> serde::Deserialize<'de> for Watcher<T>
+where
+    T: WatcherInit + serde::Deserialize<'de>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>
+    {
+        T::deserialize(deserializer).map(Self::create)
+    }
+}
