@@ -234,6 +234,7 @@ mod tests {
             WatchContext::update_current();
             assert_eq!(outer.data().value, 37);
         }).0;
+        std::mem::drop(ctx);
     }
 
     #[derive(Default)]
@@ -263,6 +264,7 @@ mod tests {
             assert_ne!(other.data().value, watcher_id);
             assert_ne!(watcher.data().value, other_id);
         }).0;
+        std::mem::drop(ctx);
     }
 
 }

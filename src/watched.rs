@@ -141,51 +141,6 @@ impl<T: fmt::Display> fmt::Display for Watched<T> {
     }
 }
 
-impl<T: PartialEq> PartialEq for Watched<T> {
-    #[inline]
-    fn eq(&self, other: &Watched<T>) -> bool {
-        PartialEq::eq(&**self, &**other)
-    }
-    #[inline]
-    fn ne(&self, other: &Watched<T>) -> bool {
-        PartialEq::ne(&**self, &**other)
-    }
-}
-
-use core::cmp::Ordering;
-
-impl<T: PartialOrd> PartialOrd for Watched<T> {
-    #[inline]
-    fn partial_cmp(&self, other: &Watched<T>) -> Option<Ordering> {
-        PartialOrd::partial_cmp(&**self, &**other)
-    }
-    #[inline]
-    fn lt(&self, other: &Watched<T>) -> bool {
-        PartialOrd::lt(&**self, &**other)
-    }
-    #[inline]
-    fn le(&self, other: &Watched<T>) -> bool {
-        PartialOrd::le(&**self, &**other)
-    }
-    #[inline]
-    fn ge(&self, other: &Watched<T>) -> bool {
-        PartialOrd::ge(&**self, &**other)
-    }
-    #[inline]
-    fn gt(&self, other: &Watched<T>) -> bool {
-        PartialOrd::gt(&**self, &**other)
-    }
-}
-
-impl<T: Ord> Ord for Watched<T> {
-    #[inline]
-    fn cmp(&self, other: &Watched<T>) -> Ordering {
-        Ord::cmp(&**self, &**other)
-    }
-}
-
-impl<T: Eq> Eq for Watched<T> {}
-
 impl<T: Clone> Clone for Watched<T> {
     fn clone(&self) -> Watched<T> {
         Watched {
@@ -212,5 +167,234 @@ impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Watched<T> {
         D: serde::Deserializer<'de>
     {
         T::deserialize(deserializer).map(Self::new)
+    }
+}
+
+mod watched_ops {
+    use core::cmp::Ordering;
+    use core::ops::*;
+
+    use super::Watched;
+
+    macro_rules! watched_unop {
+        (impl $imp:ident, $method:ident) => {
+            impl<T: $imp> $imp for Watched<T> {
+                type Output = <T as $imp>::Output;
+
+                fn $method(self) -> <T as $imp>::Output {
+                    self.meta.watched();
+                    $imp::$method(self.value)
+                }
+            }
+
+            impl<'a, T> $imp for &'a Watched<T>
+                where
+                    &'a T: $imp
+            {
+                type Output = <&'a T as $imp>::Output;
+
+                fn $method(self) -> <&'a T as $imp>::Output {
+                    self.meta.watched();
+                    $imp::$method(&self.value)
+                }
+            }
+        }
+    }
+
+    macro_rules! watched_binop {
+        (impl $imp:ident, $method:ident) => {
+            impl<T, U> $imp<U> for Watched<T>
+                where
+                    T: $imp<U>
+            {
+                type Output = <T as $imp<U>>::Output;
+
+                fn $method(self, other: U) -> <T as $imp<U>>::Output {
+                    self.meta.watched();
+                    $imp::$method(self.value, other)
+                }
+            }
+
+            impl<'a, T, U> $imp<U> for &'a Watched<T>
+                where
+                    &'a T: $imp<U>
+            {
+                type Output = <&'a T as $imp<U>>::Output;
+
+                fn $method(self, other: U) -> <&'a T as $imp<U>>::Output {
+                    self.meta.watched();
+                    $imp::$method(&self.value, other)
+                }
+            }
+        }
+    }
+
+    macro_rules! watched_binop_assign {
+        (impl $imp:ident, $method:ident) => {
+            impl<T, U> $imp<U> for Watched<T>
+                where
+                    T: $imp<U>
+            {
+                fn $method(&mut self, rhs: U) {
+                    let res = $imp::$method(&mut self.value, rhs);
+                    self.meta.trigger();
+                    self.meta.watched();
+                    res
+                }
+            }
+        }
+    }
+
+    watched_unop!(impl Neg, neg);
+    watched_unop!(impl Not, not);
+
+    watched_binop!(impl Add, add);
+    watched_binop!(impl BitAnd, bitand);
+    watched_binop!(impl BitOr, bitor);
+    watched_binop!(impl BitXor, bitxor);
+    watched_binop!(impl Div, div);
+    watched_binop!(impl Mul, mul);
+    watched_binop!(impl Rem, rem);
+    watched_binop!(impl Shl, shl);
+    watched_binop!(impl Shr, shr);
+    watched_binop!(impl Sub, sub);
+
+    watched_binop_assign!(impl AddAssign, add_assign);
+    watched_binop_assign!(impl BitAndAssign, bitand_assign);
+    watched_binop_assign!(impl BitOrAssign, bitor_assign);
+    watched_binop_assign!(impl BitXorAssign, bitxor_assign);
+    watched_binop_assign!(impl DivAssign, div_assign);
+    watched_binop_assign!(impl MulAssign, mul_assign);
+    watched_binop_assign!(impl RemAssign, rem_assign);
+    watched_binop_assign!(impl ShlAssign, shl_assign);
+    watched_binop_assign!(impl ShrAssign, shr_assign);
+    watched_binop_assign!(impl SubAssign, sub_assign);
+
+    impl<T, U> PartialEq<U> for Watched<T>
+        where
+            T: PartialEq<U>
+    {
+        fn eq(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialEq::eq(&self.value, other)
+        }
+
+        fn ne(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialEq::ne(&self.value, other)
+        }
+    }
+
+    impl<T, U> PartialOrd<U> for Watched<T>
+        where
+            T: PartialOrd<U>
+    {
+        fn partial_cmp(&self, other: &U) -> Option<Ordering> {
+            self.meta.watched();
+            PartialOrd::partial_cmp(&self.value, other)
+        }
+        fn lt(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialOrd::lt(&self.value, other)
+        }
+        fn le(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialOrd::le(&self.value, other)
+        }
+        fn ge(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialOrd::ge(&self.value, other)
+        }
+        fn gt(&self, other: &U) -> bool {
+            self.meta.watched();
+            PartialOrd::gt(&self.value, other)
+        }
+    }
+
+    /*
+    impl<T: Ord> Ord for Watched<T> {
+        fn cmp(&self, other: &Watched<T>) -> Ordering {
+            self.meta.watched();
+            other.meta.watched();
+            Ord::cmp(&self.value, &other.value)
+        }
+    }
+
+    impl<T: Eq> Eq for Watched<T> {}
+    */
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn test_watched_add() {
+        let left = Watched::new(587);
+        assert_eq!((&left) + 13, 600);
+        assert_eq!(left + 13, 600);
+    }
+
+    #[derive(Default)]
+    struct Inner {
+        value: Watched<u32>,
+    }
+
+    type Outer = Watcher<OuterData>;
+
+    #[derive(Default)]
+    struct OuterData {
+        value: u32,
+        inner: Inner,
+    }
+
+    impl WatcherInit for OuterData {
+        fn init(watcher: &mut WatcherMeta<Self>) {
+            watcher.watch(|root| {
+                root.value = *root.inner.value;
+            });
+        }
+    }
+
+    #[test]
+    fn test_add_to_watched() {
+        let mut ctx = WatchContext::new();
+        ctx = ctx.with(|| {
+            let mut outer = Outer::new();
+            *outer.data_mut().inner.value = 587;
+            WatchContext::update_current();
+            assert_eq!(outer.data().value, 587);
+
+            outer.data_mut().inner.value += 13;
+            WatchContext::update_current();
+            assert_eq!(outer.data().value, 600);
+        }).0;
+        std::mem::drop(ctx);
+    }
+
+    #[derive(Default)]
+    struct OuterXorData {
+        value: u32,
+        inner: Inner,
+    }
+
+    impl WatcherInit for OuterXorData {
+        fn init(watcher: &mut WatcherMeta<Self>) {
+            watcher.watch(|root| {
+                root.value = &root.inner.value ^ 0xffffffff;
+            });
+        }
+    }
+
+    #[test]
+    fn test_xor_watch() {
+        let mut ctx = WatchContext::new();
+        ctx = ctx.with(|| {
+            let mut outer = Watcher::<OuterXorData>::new();
+            *outer.data_mut().inner.value = 960294194;
+            WatchContext::update_current();
+            assert_eq!(outer.data().value, 3334673101);
+        }).0;
+        std::mem::drop(ctx);
     }
 }
