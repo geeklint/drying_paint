@@ -16,6 +16,10 @@ pub struct WatcherMeta<T: ?Sized> {
 }
 
 impl <T: 'static> WatcherMeta<T> {
+    /// Get a value representing a unique id for the watcher this
+    /// WatcherMeta was created for. This value may outlive the watcher, and
+    /// will never compare equal to a value returned by the id method of a
+    /// Watcher other than this one.
     pub fn id(&self) -> WatcherId {
         WatcherId {
             ptr: self.data.clone() as Weak<dyn std::any::Any>,
