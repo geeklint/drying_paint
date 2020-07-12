@@ -2,11 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 
 use super::{
-    WatchedMeta, Watched,
+    WatchedMeta,
     WatcherInit, Watcher, WatcherMeta,
 };
 
@@ -16,17 +15,10 @@ enum Container<T> {
     None,
 }
 
-fn with_container<T, F>(cell: &Cell<Container<T>>, func: F)
-    where F: FnOnce(&mut Container<T>)
-{
-    let mut tmp = cell.replace(Container::None);
-    (func)(&mut tmp);
-    cell.set(tmp);
-}
-
 struct AlternatingData<T> {
     queue: VecDeque<T>,
-    current: Watched<Cell<Container<T>>>,
+    current_data: Container<T>,
+    current_trigger: WatchedMeta,
     off_frame: WatchedMeta,
 }
 
@@ -35,21 +27,20 @@ impl<T: 'static> WatcherInit for AlternatingData<T> {
         watcher.watch(|data| {
             data.off_frame.watched();
             let next = data.queue.pop_front();
-            *data.current.get_mut() = if let Some(item) = next {
+            data.current_data = if let Some(item) = next {
                 Container::Fresh(item)
             } else {
                 Container::None
-            }
+            };
+            data.current_trigger.trigger();
         });
 
         watcher.watch(|data| {
-            let mut trigger = false;
-            with_container(&data.current, |container| {
-                trigger = match container {
-                    Container::None => false,
-                    _ => true,
-                };
-            });
+            data.current_trigger.watched();
+            let trigger = match data.current_data {
+                Container::None => false,
+                _ => true,
+            };
             if trigger {
                 data.off_frame.trigger();
             }
@@ -61,7 +52,8 @@ impl<T> Default for AlternatingData<T> {
     fn default() -> Self {
         AlternatingData {
             queue: VecDeque::new(),
-            current: Watched::new(Cell::new(Container::None)),
+            current_data: Container::None,
+            current_trigger: WatchedMeta::new(),
             off_frame: WatchedMeta::new(),
         }
     }
@@ -124,14 +116,15 @@ impl<T: 'static> WatchedEvent<T> {
     /// function is executing as a consequence of an event dispatch. When
     /// initially binding, and in-between dispatches, it will return `None`.
     pub fn get_current(&mut self) -> Option<&T> {
-        let mut hold = Container::Held;
-        with_container(&self.watcher.data().current, |container| {
-            if let Container::Fresh(_) = container {
-                std::mem::swap(container, &mut hold);
-            } else if let Container::None = container {
-                hold = Container::None;
-            }
-        });
+        let mut borrow = self.watcher.data_mut();
+        borrow.current_trigger.watched();
+        let hold = match borrow.current_data {
+            Container::Fresh(_) => {
+                std::mem::replace(&mut borrow.current_data, Container::Held)
+            },
+            Container::None => Container::None,
+            Container::Held => Container::Held,
+        };
         match hold {
             Container::Fresh(item) => {
                 self.held_data = Some(item);
