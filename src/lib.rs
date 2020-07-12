@@ -145,55 +145,6 @@ pub use event::{
     WatchedEvent
 };
 
-/// An ergonomic wrapper for binding to an WatchedEvent. This is expected to
-/// be used from within a WatcherInit implementation.
-/// ```
-/// use drying_paint::*;
-///
-/// type EventCounter = Watcher<EventCounterData>;
-///
-/// #[derive(Default)]
-/// struct EventCounterData {
-///     counter: u32,
-///     add: WatchedEvent<u32>,
-/// }
-///
-/// impl WatcherInit for EventCounterData {
-///     fn init(watcher: &mut WatcherMeta<Self>) {
-///         bind_event!(watcher => root, root.add => amount, {
-///             root.counter += amount;
-///         });
-///     }
-/// }
-///
-/// fn main() {
-///     let mut ctx = WatchContext::new();
-///     ctx = ctx.with(|| {
-///         let mut item = EventCounter::new();
-///         item.data_mut().add.dispatch(7);
-///         WatchContext::update_current();
-///         assert_eq!(item.data().counter, 7);
-///         item.data_mut().add.dispatch(9);
-///         item.data_mut().add.dispatch(3);
-///         WatchContext::update_current();
-///         assert_eq!(item.data().counter, 19);
-///     }).0;
-/// }
-/// ```
-#[macro_export]
-macro_rules! bind_event {
-    ( $watcher:expr => $root:ident ,
-        $event:expr => $arg:ident ,
-        $code:block ) => {
-        {
-            $crate::WatcherMeta::watch($watcher, |$root| {
-                if let Some($arg) = $crate::WatchedEvent::get_current(&mut $event)
-                    $code
-            });
-        }
-    };
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

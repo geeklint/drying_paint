@@ -11,7 +11,6 @@ use super::{
 
 enum Container<T> {
     Fresh(T),
-    Held,
     None,
 }
 
@@ -63,8 +62,6 @@ impl<T> Default for AlternatingData<T> {
 /// an event disptacher. This is different from a watched value
 /// ([Watched](struct.Watched.html)) in that events will fire for each value
 /// passed to WatchedEvent::dispatch() and will not "store" the data.
-/// A `bind_event` macro is provided for convience, and is the preferred way
-/// to watch an event:
 ///
 /// ```rust
 /// use drying_paint::*;
@@ -79,8 +76,11 @@ impl<T> Default for AlternatingData<T> {
 ///
 /// impl WatcherInit for EventCounterData {
 ///     fn init(watcher: &mut WatcherMeta<Self>) {
-///         bind_event!(watcher => root, root.add => amount, {
-///             root.counter += amount;
+///         watcher.watch(|root| {
+///             let counter = &mut root.counter;
+///             root.add.bind(|amount| {
+///                 *counter += amount;
+///             });
 ///         });
 ///     }
 /// }
@@ -100,7 +100,6 @@ impl<T> Default for AlternatingData<T> {
 /// }
 /// ```
 pub struct WatchedEvent<T> {
-    held_data: Option<T>,
     watcher: Watcher<AlternatingData<T>>,
 }
 
@@ -110,31 +109,15 @@ impl<T: 'static> WatchedEvent<T> {
         Default::default()
     }
 
-    /// This method provides the raw functionality of listening to an event.
-    /// Normally, it is preferred to use the bind_event macro.
-    /// This returns a reference to the value passed to dispatch() when the
-    /// function is executing as a consequence of an event dispatch. When
-    /// initially binding, and in-between dispatches, it will return `None`.
-    pub fn get_current(&mut self) -> Option<&T> {
-        let mut borrow = self.watcher.data_mut();
+    /// This callback (registered inside a
+    /// [watch](struct.WatcherMeta.html#method.watch) closure) will be run each
+    /// time the event is dispatched.
+    pub fn bind<F: FnOnce(&T)>(&self, func: F) {
+        let borrow = self.watcher.data();
         borrow.current_trigger.watched();
-        let hold = match borrow.current_data {
-            Container::Fresh(_) => {
-                std::mem::replace(&mut borrow.current_data, Container::Held)
-            },
-            Container::None => Container::None,
-            Container::Held => Container::Held,
-        };
-        match hold {
-            Container::Fresh(item) => {
-                self.held_data = Some(item);
-            },
-            Container::None => {
-                self.held_data = None;
-            },
-            Container::Held => (),
-        };
-        self.held_data.as_ref()
+        if let Container::Fresh(ref item) = borrow.current_data {
+            func(item);
+        }
     }
 
     /// Trigger the event. The argument passed will be delivered to listeners.
@@ -148,7 +131,6 @@ impl<T: 'static> WatchedEvent<T> {
 impl<T: 'static> Default for WatchedEvent<T> {
     fn default() -> Self {
         WatchedEvent {
-            held_data: None,
             watcher: Watcher::new(),
         }
     }
