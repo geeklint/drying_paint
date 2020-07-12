@@ -9,14 +9,9 @@ use super::{
     WatcherInit, Watcher, WatcherMeta,
 };
 
-enum Container<T> {
-    Fresh(T),
-    None,
-}
-
 struct AlternatingData<T> {
     queue: VecDeque<T>,
-    current_data: Container<T>,
+    current_data: Option<T>,
     current_trigger: WatchedMeta,
     off_frame: WatchedMeta,
 }
@@ -25,22 +20,13 @@ impl<T: 'static> WatcherInit for AlternatingData<T> {
     fn init(watcher: &mut WatcherMeta<Self>) {
         watcher.watch(|data| {
             data.off_frame.watched();
-            let next = data.queue.pop_front();
-            data.current_data = if let Some(item) = next {
-                Container::Fresh(item)
-            } else {
-                Container::None
-            };
+            data.current_data = data.queue.pop_front();
             data.current_trigger.trigger();
         });
 
         watcher.watch(|data| {
             data.current_trigger.watched();
-            let trigger = match data.current_data {
-                Container::None => false,
-                _ => true,
-            };
-            if trigger {
+            if let Some(_) = data.current_data {
                 data.off_frame.trigger();
             }
         });
@@ -51,7 +37,7 @@ impl<T> Default for AlternatingData<T> {
     fn default() -> Self {
         AlternatingData {
             queue: VecDeque::new(),
-            current_data: Container::None,
+            current_data: None,
             current_trigger: WatchedMeta::new(),
             off_frame: WatchedMeta::new(),
         }
@@ -115,7 +101,7 @@ impl<T: 'static> WatchedEvent<T> {
     pub fn bind<F: FnOnce(&T)>(&self, func: F) {
         let borrow = self.watcher.data();
         borrow.current_trigger.watched();
-        if let Container::Fresh(ref item) = borrow.current_data {
+        if let Some(ref item) = borrow.current_data {
             func(item);
         }
     }
