@@ -146,13 +146,20 @@ impl WatchContext {
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.back_frame.borrow().empty() {
                 if frame_limit == 0 {
-                    panic!("Updating a WatchContext exceeded it's \
-                    limit for iteration. This usually means there is a \
-                    recursive watch. You may be interested in \
-                    Watched::set_if_neq to resolve recursive watches. \
-                    If the number of iterations was intentional, you \
-                    can try increasing the limit with \
-                    WatchContext::set_frame_limit.");
+                    let current_watch_names = {
+                        self.back_frame.borrow().debug_names()
+                    };
+                    panic!(
+                        "Updating a WatchContext exceeded it's \
+                        limit for iteration.  This usually means there is a \
+                        recursive watch.  You may be interested in \
+                        Watched::set_if_neq to resolve recursive watches.  \
+                        If the number of iterations was intentional, you \
+                        can try increasing the limit with \
+                        WatchContext::set_frame_limit.  The following types \
+                        might be involved in the recursive watch:\n  {}",
+                        current_watch_names,
+                    );
                 }
                 self.front_frame.swap(&self.back_frame);
                 self.front_frame.borrow_mut().trigger();

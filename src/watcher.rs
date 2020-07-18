@@ -13,6 +13,7 @@ use super::Watch;
 pub struct WatcherMeta<T: ?Sized> {
     data: Weak<RefCell<T>>,
     watches: Vec<Watch>,
+    debug_name: &'static str,
 }
 
 impl <T: 'static> WatcherMeta<T> {
@@ -34,8 +35,15 @@ impl<T: ?Sized + 'static> WatcherMeta<T> {
         where F: Fn(&mut T) + 'static
     {
         let data = self.data.clone();
-        let watch = Watch::new(data, func);
+        let watch = Watch::new(data, func, self.debug_name);
         self.watches.push(watch);
+    }
+
+    /// Watches have a debug name used in some error messages.  It defaults to
+    /// the type name of the associated content (T).  This function allows
+    /// overriding that name.
+    pub fn set_debug_name(&mut self, debug_name: &'static str) {
+        self.debug_name = debug_name;
     }
 }
 
@@ -65,6 +73,7 @@ impl<T: WatcherInit> Watcher<T> {
             meta: WatcherMeta {
                 data: mdata,
                 watches: Vec::new(),
+                debug_name: std::any::type_name::<T>(),
             },
         };
         WatcherInit::init(&mut this.meta);

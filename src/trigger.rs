@@ -11,14 +11,17 @@ struct WatchData {
     // can this be a Box instead? why did I make it an Rc?
     update_fn: Rc<dyn Fn()>,
     cycle: Cell<usize>,
+    debug_name: &'static str,
 }
 
 pub struct Watch(Rc<WatchData>);
 
 impl Watch {
-    pub fn new<T, F>(arg: Weak<RefCell<T>>, func: F) -> Self
-        where T: ?Sized + 'static,
-              F: Fn(&mut T) + 'static
+    pub fn new<T, F>(arg: Weak<RefCell<T>>, func: F, debug_name: &'static str)
+        -> Self
+    where
+        T: ?Sized + 'static,
+        F: Fn(&mut T) + 'static
     {
         let wrapper = move || {
             if let Some(strong_arg) = arg.upgrade() {
@@ -28,6 +31,7 @@ impl Watch {
         let this = Watch(Rc::new(WatchData {
             update_fn: Rc::new(wrapper),
             cycle: Cell::new(0),
+            debug_name,
         }));
         this.get_ref().trigger();
         this
@@ -37,6 +41,7 @@ impl Watch {
         WatchRef {
             watch: Rc::downgrade(&self.0),
             cycle: self.0.cycle.get(),
+            debug_name: self.0.debug_name,
         }
     }
 }
@@ -45,6 +50,7 @@ impl Watch {
 pub struct WatchRef {
     watch: Weak<WatchData>,
     cycle: usize,
+    debug_name: &'static str,
 }
 
 impl WatchRef {
@@ -119,5 +125,14 @@ impl WatchSet {
             }
         }
         self.empty = true;
+    }
+
+    pub fn debug_names(&self) -> String {
+        self.vec.iter()
+            .filter_map(|bucket| {
+                bucket.as_ref().map(|watch| watch.debug_name)
+            })
+            .collect::<Vec<_>>()
+            .join("\n  ")
     }
 }
