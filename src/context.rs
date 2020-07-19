@@ -85,7 +85,7 @@ impl WatchContext {
 
     /// The same as doing `context.with(|| WatchContext::update_current())`
     pub fn update(self) -> Self {
-        self.with(|| Self::update_current()).0
+        self.with(Self::update_current).0
     }
 
     /// Set the number of cycles this watch context will execute before
@@ -185,5 +185,11 @@ impl WatchContext {
     
     pub(crate) fn add_to_next(&self, set: &mut WatchSet) {
         self.back_frame.borrow_mut().add_all(set);
+    }
+}
+
+impl Default for WatchContext {
+    fn default() -> Self {
+        Self::new()
     }
 }

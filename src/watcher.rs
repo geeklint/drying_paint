@@ -69,7 +69,7 @@ impl<T: WatcherInit> Watcher<T> {
         let data = Rc::new(RefCell::new(data));
         let mdata = Rc::downgrade(&data);
         let mut this = Watcher {
-            data: data,
+            data,
             meta: WatcherMeta {
                 data: mdata,
                 watches: Vec::new(),

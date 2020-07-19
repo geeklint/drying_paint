@@ -26,7 +26,7 @@ impl<T: 'static> WatcherInit for AlternatingData<T> {
 
         watcher.watch(|data| {
             data.current_trigger.watched();
-            if let Some(_) = data.current_data {
+            if data.current_data.is_some() {
                 data.off_frame.trigger();
             }
         });

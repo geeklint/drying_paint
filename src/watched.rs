@@ -11,6 +11,7 @@ use super::{WatchContext, WatchSet};
 /// it to provide functionality using the watch system for cases where
 /// [Watched](struct.Watched.html) and
 /// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
+#[derive(Default)]
 pub struct WatchedMeta {
     watchers: RefCell<WatchSet>,
 }

@@ -57,7 +57,7 @@ impl WatchRef {
     fn trigger(self) {
         if let Some(watch) = self.watch.upgrade() {
             if self.cycle == watch.cycle.get() {
-                let mut new = self.clone();
+                let mut new = self;
                 new.cycle += 1;
                 watch.cycle.set(new.cycle);
                 WatchContext::expect_current(|ctx| {
@@ -134,5 +134,11 @@ impl WatchSet {
             })
             .collect::<Vec<_>>()
             .join("\n  ")
+    }
+}
+
+impl Default for WatchSet {
+    fn default() -> Self {
+        Self::new()
     }
 }
