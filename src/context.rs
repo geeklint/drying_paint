@@ -135,7 +135,7 @@ impl WatchContext {
         U: 'static,
         R: 'static,
     {
-        func(data)
+        crate::pointer::BorrowedPointer::allow_refs(data, func)
     }
 
     pub(crate) fn expect_current<F: FnOnce(&WatchContext)>(func: F, msg: &str) {

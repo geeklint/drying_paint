@@ -2,13 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
+use crate::pointer::{
+    OwnedPointer,
+    BorrowedPointer,
+};
 use super::Watch;
 
 struct WatcherMetaBase<T: ?Sized> {
-    data: Weak<RefCell<T>>,
+    data: BorrowedPointer<T>,
     watches: Vec<Watch>,
 }
 
@@ -28,7 +29,7 @@ impl <T: 'static> WatcherMeta<'_, T> {
     /// Watcher other than this one.
     pub fn id(&self) -> WatcherId {
         WatcherId {
-            ptr: self.base.data.clone(),
+            ptr: self.base.data.clone().into_any(),
         }
     }
 }
@@ -63,7 +64,7 @@ pub trait WatcherInit {
 /// Watcher is a structure designed to hold some data along with associated
 /// functions which will run when watched data changes.
 pub struct Watcher<T: ?Sized> {
-    data: Rc<RefCell<T>>,
+    data: OwnedPointer<T>,
     _meta: WatcherMetaBase<T>,
 }
 
@@ -71,16 +72,16 @@ impl<T: WatcherInit> Watcher<T> {
     /// Create a new Watcher. After creation, will run WatcherInit::init for
     /// the stored data.
     pub fn create(data: T) -> Self {
-        let data = Rc::new(RefCell::new(data));
+        let mut data = OwnedPointer::new(data);
         let meta_base = WatcherMetaBase {
-            data: Rc::downgrade(&data),
+            data: data.new_borrowed(),
             watches: Vec::new(),
         };
         let meta = {
             let mut meta = WatcherMeta {
                 base: meta_base,
                 debug_name: std::any::type_name::<T>(),
-                key_data: &mut data.borrow_mut(),
+                key_data: &mut data.as_mut(),
             };
             WatcherInit::init(&mut meta);
             meta.base
@@ -96,15 +97,15 @@ impl<T: WatcherInit + ?Sized> Watcher<T> {
     /// Get an immutable reference to the data stored in this Watcher.
     /// Note that this follows the same rules as RefCell, and may panic if
     /// the runtime borrow checker detects and invalid borrow.
-    pub fn data(&self) -> std::cell::Ref<T> {
-        self.data.borrow()
+    pub fn data(&self) -> &T {
+        self.data.as_ref()
     }
 
     /// Get an mutable reference to the data stored in this Watcher.
     /// Note that this follows the same rules as RefCell, and may panic if
     /// the runtime borrow checker detects and invalid borrow.
-    pub fn data_mut(&mut self) -> std::cell::RefMut<T> {
-        self.data.borrow_mut()
+    pub fn data_mut(&mut self) -> &mut T {
+        self.data.as_mut()
     }
 }
 
@@ -124,7 +125,7 @@ impl<T: WatcherInit + Default> Default for Watcher<T> {
 
 impl<T: WatcherInit + Clone> Clone for Watcher<T> {
     fn clone(&self) -> Self {
-        Watcher::create(self.data.borrow().clone())
+        Watcher::create(self.data.as_ref().clone())
     }
 }
 
@@ -134,7 +135,7 @@ impl<T: 'static> Watcher<T> {
     /// returned by the id method of a Watcher other than this one.
     pub fn id(&self) -> WatcherId {
         WatcherId {
-            ptr: Rc::downgrade(&self.data) as Weak<dyn std::any::Any>,
+            ptr: self.data.new_borrowed().into_any(),
         }
     }
 }
@@ -145,7 +146,7 @@ impl<T: 'static> Watcher<T> {
 /// other than this one.
 #[derive(Clone)]
 pub struct WatcherId {
-    ptr: Weak<dyn std::any::Any>,
+    ptr: BorrowedPointer<dyn std::any::Any>,
 }
 
 impl PartialEq for WatcherId {
@@ -168,7 +169,7 @@ impl<T: serde::Serialize> serde::Serialize for Watcher<T> {
     where
         S: serde::Serializer
     {
-        T::serialize(&self.data.borrow(), serializer)
+        T::serialize(self.data.as_ref(), serializer)
     }
 }
 

@@ -5,6 +5,9 @@
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
 
+use crate::pointer::{
+    BorrowedPointer,
+};
 use super::WatchContext;
 
 struct WatchData {
@@ -13,12 +16,12 @@ struct WatchData {
     debug_name: &'static str,
 }
 
-pub struct Watch(Rc<WatchData>);
+pub(crate) struct Watch(Rc<WatchData>);
 
 impl Watch {
     pub fn new<T, F>(
         key_arg: &mut T,
-        arg: Weak<RefCell<T>>,
+        arg: BorrowedPointer<T>,
         func: F,
         debug_name: &'static str,
     ) -> Self
@@ -36,10 +39,13 @@ impl Watch {
                 func(key_arg);
             });
         }, "Watch::new() called outside of WatchContext");
+        let func_cell = Cell::new(Some(func));
         *this.0.update_fn.borrow_mut() = Box::new(move || {
-            if let Some(strong_arg) = arg.upgrade() {
-                func(&mut strong_arg.borrow_mut());
-            }
+            let func = func_cell.take().unwrap();
+            let func = arg.upgrade(func, move |func, strong_arg| {
+                func(strong_arg);
+            });
+            func_cell.set(Some(func));
         });
         this
     }

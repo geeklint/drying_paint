@@ -143,6 +143,7 @@
 
 
 #![warn(missing_docs)]
+#![allow(clippy::needless_doctest_main)]
 
 mod trigger;
 use trigger::{Watch, WatchRef, WatchSet};
