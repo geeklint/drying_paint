@@ -160,20 +160,21 @@ pub(crate) struct BorrowedPointer<T: ?Sized> {
 }
 
 impl BorrowedPointer<()> {
-    pub fn allow_refs<F, U>(mut data: U, func: F) -> U
+    pub fn allow_refs<F, U, R>(data: U, func: F) -> R
     where
-        F: FnOnce(&mut U) + 'static,
+        F: 'static + FnOnce(U) -> R,
         U: 'static,
+        R: 'static,
     {
         let guard = BorrowGuard::block();
-        func(&mut data);
+        let ret = func(data);
         std::mem::drop(guard);
-        data
+        ret
     }
 }
 
 impl<T: ?Sized> BorrowedPointer<T> {
-    pub fn upgrade<F, U>(&mut self, mut data: U, func: F) -> U
+    pub fn upgrade<F, U>(&self, mut data: U, func: F) -> U
     where
         F: FnOnce(&mut U, &mut T) + 'static,
         U: 'static,
@@ -226,8 +227,9 @@ mod tests {
     #[test]
     fn pointer_allow_refs_allows_muts() {
         let ptr = OwnedPointer::<Option<u32>>::default();
-        let ptr = BorrowedPointer::allow_refs(ptr, |ptr| {
+        let ptr = BorrowedPointer::allow_refs(ptr, |mut ptr| {
             *ptr.as_mut() = Some(77);
+            ptr
         });
         assert_eq!(ptr.into_inner(), Some(77));
     }
@@ -251,7 +253,7 @@ mod tests {
     fn pointer_upgrade_allows_different_muts() {
         let ptr0 = OwnedPointer::<Option<u32>>::default();
         let ptr1 = OwnedPointer::<Option<u32>>::default();
-        let mut brw0 = ptr0.new_borrowed();
+        let brw0 = ptr0.new_borrowed();
         let ptr1 = brw0.upgrade(ptr1, |ptr1, up0| {
             *up0 = Some(792);
             *ptr1.as_mut() = Some(446);
@@ -264,7 +266,7 @@ mod tests {
     #[should_panic(expected = "is already borrowed as a BorrowedPointer")]
     fn pointer_upgrade_prevents_same_muts() {
         let ptr0 = OwnedPointer::<Option<u32>>::default();
-        let mut brw0 = ptr0.new_borrowed();
+        let brw0 = ptr0.new_borrowed();
         let ptr0 = brw0.upgrade(ptr0, |ptr0, up0| {
             *ptr0.as_mut() = Some(446);
             *up0 = Some(792);
@@ -277,7 +279,7 @@ mod tests {
     fn pointer_cannot_upgrade_inside_upgrade() {
         let ptr0 = OwnedPointer::<Option<u32>>::default();
         let ptr1 = OwnedPointer::<Option<u32>>::default();
-        let mut brw0 = ptr0.new_borrowed();
+        let brw0 = ptr0.new_borrowed();
         let brw1 = ptr1.new_borrowed();
         brw0.upgrade(brw1, |brw1, up0| {
             brw1.upgrade((), |(), up1| {
