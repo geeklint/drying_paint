@@ -23,7 +23,7 @@ impl <T: 'static> WatcherMeta<T> {
     /// Watcher other than this one.
     pub fn id(&self) -> WatcherId {
         WatcherId {
-            ptr: self.data.clone() as Weak<dyn std::any::Any>,
+            ptr: self.data.clone(),
         }
     }
 }
