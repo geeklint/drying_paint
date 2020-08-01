@@ -30,6 +30,9 @@
 //! BorrowedPointer::allow_refs are 'static, which prevents references
 //! borrowed from OwnedPointers from escaping their scope.
 
+// TODO: UnsafeCell in this mod can probably be removed and instances replaced
+// with Rc::get_unchecked_mut once that API is stablized
+
 use std::rc::{
     Rc,
     Weak,
@@ -187,6 +190,16 @@ impl<T: ?Sized> BorrowedPointer<T> {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.ptr.ptr_eq(&other.ptr)
+    }
+}
+
+impl<T: 'static> BorrowedPointer<T> {
+    pub fn into_any(self) -> BorrowedPointer<dyn std::any::Any> {
+        // TODO: this can probably be removed when CoerceUnsized
+        // gets stablized
+        BorrowedPointer {
+            ptr: self.ptr,
+        }
     }
 }
 
