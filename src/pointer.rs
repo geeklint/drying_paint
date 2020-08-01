@@ -2,6 +2,34 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+//! This module exposes a smart pointer type with specific usage patterns.
+//! It allows a subset of the sharing that std::rc::Rc does: There is one
+//! primary owner of any data (OwnedPointer), but there may be many Weak-style
+//! runtime borrows (BorrowedPointer).
+//!
+//! BorrowedPointers have exactly one path to obtaining a reference to their
+//! data: BorrowedPointer::upgrade passes a reference to the contained data
+//! to the closure it receives.
+//!
+//! In order to observe Rust's aliasing rules, the following invarients are
+//! upheld:
+//!
+//! - Only one BorrowedPointer may be upgraded at a time.
+//!
+//! - Attempting to access an OwnedPointer while its data are currently
+//! borrowed via BorrowedPointer::upgrade will panic.
+//!
+//! - Attempting to access an OwnedPointer while nothing is currently borrowed
+//! via BorrowedPointer::upgrade (which would allow a future upgrade) will
+//! also panic.
+//!
+//! In order to work around that last point, BorrowedPointer::allow_refs is
+//! provided.  This prevents upgrades without borrowing anything specifically.
+//!
+//! The closures and userdata provided to BorrowedPointer::upgrade and
+//! BorrowedPointer::allow_refs are 'static, which prevents references
+//! borrowed from OwnedPointers from escaping their scope.
+
 use std::rc::{
     Rc,
     Weak,
@@ -187,7 +215,7 @@ mod tests {
     fn pointer_muts_outside_allow_refs_denied() {
         let mut ptr = OwnedPointer::<Option<u32>>::default();
         *ptr.as_mut() = Some(879);
-        assert_eq!(ptr.into_inner(), Some(879));
+        println!("{:?}", ptr.into_inner());
     }
 
     #[test]
