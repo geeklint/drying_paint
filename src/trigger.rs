@@ -8,8 +8,7 @@ use std::cell::{Cell, RefCell};
 use super::WatchContext;
 
 struct WatchData {
-    // can this be a Box instead? why did I make it an Rc?
-    update_fn: Rc<dyn Fn()>,
+    update_fn: RefCell<Box<dyn Fn()>>,
     cycle: Cell<usize>,
     debug_name: &'static str,
 }
@@ -17,23 +16,31 @@ struct WatchData {
 pub struct Watch(Rc<WatchData>);
 
 impl Watch {
-    pub fn new<T, F>(arg: Weak<RefCell<T>>, func: F, debug_name: &'static str)
-        -> Self
+    pub fn new<T, F>(
+        key_arg: &mut T,
+        arg: Weak<RefCell<T>>,
+        func: F,
+        debug_name: &'static str,
+    ) -> Self
     where
         T: ?Sized + 'static,
         F: Fn(&mut T) + 'static
     {
-        let wrapper = move || {
-            if let Some(strong_arg) = arg.upgrade() {
-                func(&mut strong_arg.borrow_mut());
-            }
-        };
         let this = Watch(Rc::new(WatchData {
-            update_fn: Rc::new(wrapper),
+            update_fn: RefCell::new(Box::new(|| ())),
             cycle: Cell::new(0),
             debug_name,
         }));
-        this.get_ref().trigger();
+        WatchContext::expect_current(|ctx| {
+            ctx.bind_watch(this.get_ref(), || {
+                func(key_arg);
+            });
+        }, "Watch::new() called outside of WatchContext");
+        *this.0.update_fn.borrow_mut() = Box::new(move || {
+            if let Some(strong_arg) = arg.upgrade() {
+                func(&mut strong_arg.borrow_mut());
+            }
+        });
         this
     }
 
@@ -61,7 +68,9 @@ impl WatchRef {
                 new.cycle += 1;
                 watch.cycle.set(new.cycle);
                 WatchContext::expect_current(|ctx| {
-                    ctx.bind_watch(new, || (watch.update_fn)());
+                    ctx.bind_watch(new, || {
+                        (watch.update_fn.borrow())()
+                    });
                 }, "WatchRef.trigger() called outside of WatchContext");
             }
         }

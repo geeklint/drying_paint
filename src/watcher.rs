@@ -7,36 +7,41 @@ use std::rc::{Rc, Weak};
 
 use super::Watch;
 
+struct WatcherMetaBase<T: ?Sized> {
+    data: Weak<RefCell<T>>,
+    watches: Vec<Watch>,
+}
+
 /// This structure is used internally by Watcher<T>. It is passed to the init
 /// function of WatcherInit, the trait which is required to be implemented by
 /// the data stored in Watchers.
-pub struct WatcherMeta<T: ?Sized> {
-    data: Weak<RefCell<T>>,
-    watches: Vec<Watch>,
+pub struct WatcherMeta<'a, T: ?Sized> {
+    base: WatcherMetaBase<T>,
     debug_name: &'static str,
+    key_data: &'a mut T,
 }
 
-impl <T: 'static> WatcherMeta<T> {
+impl <T: 'static> WatcherMeta<'_, T> {
     /// Get a value representing a unique id for the watcher this
     /// WatcherMeta was created for. This value may outlive the watcher, and
     /// will never compare equal to a value returned by the id method of a
     /// Watcher other than this one.
     pub fn id(&self) -> WatcherId {
         WatcherId {
-            ptr: self.data.clone(),
+            ptr: self.base.data.clone(),
         }
     }
 }
 
-impl<T: ?Sized + 'static> WatcherMeta<T> {
+impl<T: ?Sized + 'static> WatcherMeta<'_, T> {
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
     pub fn watch<F>(&mut self, func: F)
         where F: Fn(&mut T) + 'static
     {
-        let data = self.data.clone();
-        let watch = Watch::new(data, func, self.debug_name);
-        self.watches.push(watch);
+        let data = self.base.data.clone();
+        let watch = Watch::new(self.key_data, data, func, self.debug_name);
+        self.base.watches.push(watch);
     }
 
     /// Watches have a debug name used in some error messages.  It defaults to
@@ -59,7 +64,7 @@ pub trait WatcherInit {
 /// functions which will run when watched data changes.
 pub struct Watcher<T: ?Sized> {
     data: Rc<RefCell<T>>,
-    meta: WatcherMeta<T>,
+    _meta: WatcherMetaBase<T>,
 }
 
 impl<T: WatcherInit> Watcher<T> {
@@ -67,17 +72,23 @@ impl<T: WatcherInit> Watcher<T> {
     /// the stored data.
     pub fn create(data: T) -> Self {
         let data = Rc::new(RefCell::new(data));
-        let mdata = Rc::downgrade(&data);
-        let mut this = Watcher {
-            data,
-            meta: WatcherMeta {
-                data: mdata,
-                watches: Vec::new(),
-                debug_name: std::any::type_name::<T>(),
-            },
+        let meta_base = WatcherMetaBase {
+            data: Rc::downgrade(&data),
+            watches: Vec::new(),
         };
-        WatcherInit::init(&mut this.meta);
-        this
+        let meta = {
+            let mut meta = WatcherMeta {
+                base: meta_base,
+                debug_name: std::any::type_name::<T>(),
+                key_data: &mut data.borrow_mut(),
+            };
+            WatcherInit::init(&mut meta);
+            meta.base
+        };
+        Watcher {
+            data,
+            _meta: meta,
+        }
     }
 }
 
