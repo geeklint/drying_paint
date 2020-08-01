@@ -151,7 +151,7 @@ impl<T> OwnedPointer<T> {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(crate) struct BorrowedPointer<T: ?Sized> {
     ptr: Weak<UnsafeCell<T>>,
 }
@@ -187,6 +187,14 @@ impl<T: ?Sized> BorrowedPointer<T> {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.ptr.ptr_eq(&other.ptr)
+    }
+}
+
+impl<T: ?Sized> Clone for BorrowedPointer<T> {
+    fn clone(&self) -> Self {
+        Self {
+            ptr: self.ptr.clone(),
+        }
     }
 }
 
