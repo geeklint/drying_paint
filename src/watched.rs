@@ -89,10 +89,15 @@ impl<T: PartialEq> Watched<T> {
     ///     let mut ctx = WatchContext::new();
     ///     ctx.set_frame_limit(Some(100));
     ///     ctx.with(|| {
-    ///         let mut obj = Watcher::<KeepBalanced>::new();
-    ///         *obj.data_mut().left = 68;
+    ///         let obj = WatchContext::allow_watcher_access((), |()| {
+    ///             let mut obj = Watcher::<KeepBalanced>::new();
+    ///             *obj.data_mut().left = 68;
+    ///             obj
+    ///         });
     ///         WatchContext::update_current();
-    ///         assert_eq!(*obj.data().right, 68);
+    ///         WatchContext::allow_watcher_access(obj, |obj| {
+    ///             assert_eq!(*obj.data().right, 68);
+    ///         });
     ///     });
     /// }
     pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
@@ -361,14 +366,21 @@ mod tests {
     fn test_add_to_watched() {
         let mut ctx = WatchContext::new();
         ctx = ctx.with(|| {
-            let mut outer = Outer::new();
-            *outer.data_mut().inner.value = 587;
+            let outer = WatchContext::allow_watcher_access((), |()| {
+                let mut outer = Outer::new();
+                *outer.data_mut().inner.value = 587;
+                outer
+            });
             WatchContext::update_current();
-            assert_eq!(outer.data().value, 587);
-
-            outer.data_mut().inner.value += 13;
+            let outer = WatchContext::allow_watcher_access(outer, |mut outer| {
+                assert_eq!(outer.data().value, 587);
+                outer.data_mut().inner.value += 13;
+                outer
+            });
             WatchContext::update_current();
-            assert_eq!(outer.data().value, 600);
+            WatchContext::allow_watcher_access(outer, |outer| {
+                assert_eq!(outer.data().value, 600);
+            });
         }).0;
         std::mem::drop(ctx);
     }
@@ -391,10 +403,15 @@ mod tests {
     fn test_xor_watch() {
         let mut ctx = WatchContext::new();
         ctx = ctx.with(|| {
-            let mut outer = Watcher::<OuterXorData>::new();
-            *outer.data_mut().inner.value = 960294194;
+            let outer = WatchContext::allow_watcher_access((), |()| {
+                let mut outer = Watcher::<OuterXorData>::new();
+                *outer.data_mut().inner.value = 960294194;
+                outer
+            });
             WatchContext::update_current();
-            assert_eq!(outer.data().value, 3334673101);
+            WatchContext::allow_watcher_access(outer, |outer| {
+                assert_eq!(outer.data().value, 3334673101);
+            });
         }).0;
         std::mem::drop(ctx);
     }

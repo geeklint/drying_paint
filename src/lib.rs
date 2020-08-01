@@ -27,10 +27,15 @@
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
 //! #     ctx = ctx.with(|| {
-//! #         let mut obj = Hello::new();
-//! #         *obj.data_mut().name = "Rust".to_string();
+//! #         let obj = WatchContext::allow_watcher_access((), |()| {
+//! #             let mut obj = Hello::new();
+//! #             *obj.data_mut().name = "Rust".to_string();
+//! #             obj
+//! #         });
 //! #         WatchContext::update_current();
-//! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
+//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         });
 //! #     }).0;
 //! # }
 //! ```
@@ -56,10 +61,15 @@
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
 //! #     ctx = ctx.with(|| {
-//! #         let mut obj = Hello::new();
-//! #         *obj.data_mut().name = "Rust".to_string();
+//! #         let obj = WatchContext::allow_watcher_access((), |()| {
+//! #             let mut obj = Hello::new();
+//! #             *obj.data_mut().name = "Rust".to_string();
+//! #             obj
+//! #         });
 //! #         WatchContext::update_current();
-//! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
+//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         });
 //! #     }).0;
 //! # }
 //! ```
@@ -84,10 +94,15 @@
 //! # fn main() {
 //! #     let mut ctx = WatchContext::new();
 //! #     ctx = ctx.with(|| {
-//! #         let mut obj = Hello::new();
-//! #         *obj.data_mut().name = "Rust".to_string();
+//! #         let obj = WatchContext::allow_watcher_access((), |()| {
+//! #             let mut obj = Hello::new();
+//! #             *obj.data_mut().name = "Rust".to_string();
+//! #             obj
+//! #         });
 //! #         WatchContext::update_current();
-//! #         assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
+//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
+//! #         });
 //! #     }).0;
 //! # }
 //! ```
@@ -113,10 +128,15 @@
 //! fn main() {
 //!     let mut ctx = WatchContext::new();
 //!     ctx = ctx.with(|| {
-//!         let mut obj = Hello::new();
-//!         *obj.data_mut().name = "Rust".to_string();
+//!         let obj = WatchContext::allow_watcher_access((), |()| {
+//!             let mut obj = Hello::new();
+//!             *obj.data_mut().name = "Rust".to_string();
+//!             obj
+//!         });
 //!         WatchContext::update_current();
-//!         assert_eq!(obj.data().greeting, "Hello, Rust!");
+//!         let obj = WatchContext::allow_watcher_access(obj, |obj| {
+//!             assert_eq!(obj.data().greeting, "Hello, Rust!");
+//!         });
 //!     }).0;
 //! }
 //! ```
@@ -182,10 +202,15 @@ mod tests {
     fn test_propogate() {
         let mut ctx = WatchContext::new();
         ctx = ctx.with(|| {
-            let mut outer = Outer::new();
-            outer.data_mut().set_inner(37);
+            let outer = WatchContext::allow_watcher_access((), |()| {
+                let mut outer = Outer::new();
+                outer.data_mut().set_inner(37);
+                outer
+            });
             WatchContext::update_current();
-            assert_eq!(outer.data().value, 37);
+            WatchContext::allow_watcher_access(outer, |outer| {
+                assert_eq!(outer.data().value, 37);
+            });
         }).0;
         std::mem::drop(ctx);
     }
@@ -208,14 +233,26 @@ mod tests {
     fn test_meta_id() {
         let mut ctx = WatchContext::new();
         ctx = ctx.with(|| {
-            let watcher: Watcher<InnerId> = Watcher::new();
+            let watcher: Watcher<InnerId> = WatchContext::allow_watcher_access((), |()| {
+                Watcher::new()
+            });
             let watcher_id = Some(watcher.id());
-            assert_eq!(watcher.data().value, watcher_id);
+            let (watcher, watcher_id) = WatchContext::allow_watcher_access(
+                (watcher, watcher_id),
+                |(watcher, watcher_id)| {
+                    assert_eq!(watcher.data().value, watcher_id);
+                    (watcher, watcher_id)
+                }
+            );
 
-            let other: Watcher<InnerId> = Watcher::new();
+            let other: Watcher<InnerId> = WatchContext::allow_watcher_access((), |()| {
+                Watcher::new()
+            });
             let other_id = Some(other.id());
-            assert_ne!(other.data().value, watcher_id);
-            assert_ne!(watcher.data().value, other_id);
+            WatchContext::allow_watcher_access((watcher, other), move |(watcher, other)| {
+                assert_ne!(other.data().value, watcher_id);
+                assert_ne!(watcher.data().value, other_id);
+            });
         }).0;
         std::mem::drop(ctx);
     }

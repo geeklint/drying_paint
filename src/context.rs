@@ -115,8 +115,11 @@ impl WatchContext {
     ///     let mut ctx = WatchContext::new();
     ///     ctx.set_frame_limit(Some(100));
     ///     ctx = ctx.with(|| {
-    ///         let mut obj = Watcher::<KeepBalanced>::new();
-    ///         *obj.data_mut().left = 4;
+    ///         let obj = WatchContext::allow_watcher_access((), |()| {
+    ///             let mut obj = Watcher::<KeepBalanced>::new();
+    ///             *obj.data_mut().left = 4;
+    ///             obj
+    ///         });
     ///         // because we used set_frame_limit, this will panic after
     ///         // 100 iterations.
     ///         WatchContext::update_current();
@@ -124,6 +127,15 @@ impl WatchContext {
     /// }
     pub fn set_frame_limit(&mut self, value: Option<usize>) {
         self.frame_limit = value;
+    }
+
+    pub fn allow_watcher_access<F, U, R>(data: U, func: F) -> R
+    where
+        F: 'static + FnOnce(U) -> R,
+        U: 'static,
+        R: 'static,
+    {
+        func(data)
     }
 
     pub(crate) fn expect_current<F: FnOnce(&WatchContext)>(func: F, msg: &str) {

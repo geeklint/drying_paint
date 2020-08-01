@@ -74,14 +74,22 @@ impl<T> Default for AlternatingData<T> {
 /// fn main() {
 ///     let mut ctx = WatchContext::new();
 ///     ctx.with(|| {
-///         let mut item = EventCounter::new();
-///         item.data_mut().add.dispatch(7);
+///         let item = WatchContext::allow_watcher_access((), |()| {
+///             let mut item = EventCounter::new();
+///             item.data_mut().add.dispatch(7);
+///             item
+///         });
 ///         WatchContext::update_current();
-///         assert_eq!(item.data().counter, 7);
-///         item.data_mut().add.dispatch(9);
-///         item.data_mut().add.dispatch(3);
+///         let item = WatchContext::allow_watcher_access(item, |mut item| {
+///             assert_eq!(item.data().counter, 7);
+///             item.data_mut().add.dispatch(9);
+///             item.data_mut().add.dispatch(3);
+///             item
+///         });
 ///         WatchContext::update_current();
-///         assert_eq!(item.data().counter, 19);
+///         WatchContext::allow_watcher_access(item, |mut item| {
+///             assert_eq!(item.data().counter, 19);
+///         });
 ///     });
 /// }
 /// ```
