@@ -138,6 +138,10 @@ impl<T: ?Sized> OwnedPointer<T> {
 }
 
 impl<T> OwnedPointer<T> {
+    pub fn new(data: T) -> Self {
+        Self { ptr: Rc::new(UnsafeCell::new(data)) }
+    }
+
     pub fn into_inner(self) -> T {
         if let Ok(cell) = Rc::try_unwrap(self.ptr) {
             cell.into_inner()
@@ -147,7 +151,7 @@ impl<T> OwnedPointer<T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct BorrowedPointer<T: ?Sized> {
     ptr: Weak<UnsafeCell<T>>,
 }
@@ -179,6 +183,10 @@ impl<T: ?Sized> BorrowedPointer<T> {
             std::mem::drop(guard);
         }
         data
+    }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        self.ptr.ptr_eq(&other.ptr)
     }
 }
 
