@@ -135,6 +135,8 @@ pub use watched::{
     WatchedMeta, Watched
 };
 
+mod pointer;
+
 mod watcher;
 pub use watcher::{
     WatcherMeta, WatcherInit, Watcher, WatcherId
