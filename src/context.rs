@@ -129,6 +129,9 @@ impl WatchContext {
         self.frame_limit = value;
     }
 
+    /// In order to ensure the data stored in Watchers is not mutably aliased
+    /// during watch callbacks, Watcher::data() and Watcher::data_mut() will
+    /// panic if called outside this function or a watch callback.
     pub fn allow_watcher_access<F, U, R>(data: U, func: F) -> R
     where
         F: 'static + FnOnce(U) -> R,

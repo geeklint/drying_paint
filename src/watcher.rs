@@ -70,7 +70,9 @@ pub struct Watcher<T: ?Sized> {
 
 impl<T: WatcherInit> Watcher<T> {
     /// Create a new Watcher. After creation, will run WatcherInit::init for
-    /// the stored data.
+    /// the stored data.  Watchers need to be created inside
+    /// WatchContext::allow_watcher_access() in order to observe aliasing
+    /// rules.
     pub fn create(data: T) -> Self {
         let mut data = OwnedPointer::new(data);
         let meta_base = WatcherMetaBase {
@@ -95,15 +97,17 @@ impl<T: WatcherInit> Watcher<T> {
 
 impl<T: WatcherInit + ?Sized> Watcher<T> {
     /// Get an immutable reference to the data stored in this Watcher.
-    /// Note that this follows the same rules as RefCell, and may panic if
-    /// the runtime borrow checker detects and invalid borrow.
+    /// In order to ensure aliasing rules are maintained, this function will
+    /// panic if called outside a watch callback or
+    /// WatchContext::allow_watcher_access
     pub fn data(&self) -> &T {
         self.data.as_ref()
     }
 
     /// Get an mutable reference to the data stored in this Watcher.
-    /// Note that this follows the same rules as RefCell, and may panic if
-    /// the runtime borrow checker detects and invalid borrow.
+    /// In order to ensure aliasing rules are maintained, this function will
+    /// panic if called outside a watch callback or
+    /// WatchContext::allow_watcher_access
     pub fn data_mut(&mut self) -> &mut T {
         self.data.as_mut()
     }

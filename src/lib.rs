@@ -108,7 +108,10 @@
 //! ```
 //! Creating watchers and setting watched data needs to happen within a 
 //! WatchContext. WatchContext::update_current() will cause all the pending
-//! watcher code to run.
+//! watcher code to run.  WatchContext::allow_watcher_access() is used to
+//! create and access the Watcher,  This is required in order to comply with
+//! aliasing rules.
+//!
 //!
 //! ```rust
 //! # use drying_paint::*;
