@@ -93,6 +93,12 @@ impl<T: WatcherInit> Watcher<T> {
             _meta: meta,
         }
     }
+
+    /// Consume the Watcher and return the data stored inside. Watch callbacks
+    /// will no longer run.
+    pub fn into_inner(self) -> T {
+        self.data.into_inner()
+    }
 }
 
 impl<T: WatcherInit + ?Sized> Watcher<T> {
