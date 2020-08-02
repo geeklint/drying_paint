@@ -116,7 +116,7 @@ impl<T: 'static> WatchedEvent<T> {
 
     /// Trigger the event. The argument passed will be delivered to listeners.
     pub fn dispatch(&mut self, arg: T) {
-        let mut data = self.watcher.data_mut();
+        let data = self.watcher.data_mut();
         data.queue.push_back(arg);
         data.off_frame.trigger();
     }

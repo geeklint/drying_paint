@@ -285,6 +285,7 @@ mod watched_ops {
             PartialEq::eq(&self.value, other)
         }
 
+        #[allow(clippy::partialeq_ne_impl)]
         fn ne(&self, other: &U) -> bool {
             self.meta.watched();
             PartialEq::ne(&self.value, other)
