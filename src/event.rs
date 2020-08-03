@@ -63,10 +63,9 @@ impl<T> Default for AlternatingData<T> {
 /// impl WatcherInit for EventCounterData {
 ///     fn init(watcher: &mut WatcherMeta<Self>) {
 ///         watcher.watch(|root| {
-///             let counter = &mut root.counter;
-///             root.add.bind(|amount| {
-///                 *counter += amount;
-///             });
+///             if let Some(amount) = root.add.bind() {
+///                 root.counter += amount;
+///             }
 ///         });
 ///     }
 /// }
@@ -103,15 +102,12 @@ impl<T: 'static> WatchedEvent<T> {
         Default::default()
     }
 
-    /// This callback (registered inside a
-    /// [watch](struct.WatcherMeta.html#method.watch) closure) will be run each
-    /// time the event is dispatched.
-    pub fn bind<F: FnOnce(&T)>(&self, func: F) {
+    /// Used inside a [watch](struct.WatcherMeta.html#method.watch) closure
+    /// this will return a value each time the event is dispatched
+    pub fn bind(&self) -> Option<&T> {
         let borrow = self.watcher.data();
         borrow.current_trigger.watched();
-        if let Some(ref item) = borrow.current_data {
-            func(item);
-        }
+        borrow.current_data.as_ref()
     }
 
     /// Trigger the event. The argument passed will be delivered to listeners.
