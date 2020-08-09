@@ -56,6 +56,24 @@ impl<T> Watched<T> {
     pub fn new(value: T) -> Self {
         Watched { value, meta: WatchedMeta::new() }
     }
+
+    /// Consumes the `Watched`, returning the wrapped value
+    pub fn into_inner(self) -> T {
+        self.value
+    }
+
+    /// Replaces the wrapped value with a new one, returning the old value,
+    /// without deinitializing either one.
+    pub fn replace(&mut self, value: T) -> T {
+        std::mem::replace(&mut *self, value)
+    }
+}
+
+impl<T: Default> Watched<T> {
+    /// Takes the wrapped value, leaving `Default::default()` in its place.
+    pub fn take(&mut self) -> T {
+        std::mem::take(&mut *self)
+    }
 }
 
 impl<T: PartialEq> Watched<T> {
