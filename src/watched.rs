@@ -46,9 +46,9 @@ impl WatchedMeta {
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
 /// changes.
-pub struct Watched<T> {
-    value: T,
+pub struct Watched<T: ?Sized> {
     meta: WatchedMeta,
+    value: T,
 }
 
 impl<T> Watched<T> {
@@ -109,7 +109,7 @@ impl<T: PartialEq> Watched<T> {
     }
 }
 
-impl<T> Deref for Watched<T> {
+impl<T: ?Sized> Deref for Watched<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -119,7 +119,7 @@ impl<T> Deref for Watched<T> {
 }
 
 
-impl<T> DerefMut for Watched<T> {
+impl<T: ?Sized> DerefMut for Watched<T> {
     fn deref_mut(&mut self) -> &mut T {
         self.meta.trigger();
         self.meta.watched();
@@ -135,13 +135,13 @@ impl<T: Default> Default for Watched<T> {
 
 use std::fmt;
 
-impl<T: fmt::Debug> fmt::Debug for Watched<T> {
+impl<T: fmt::Debug + ?Sized> fmt::Debug for Watched<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Watched<T> {
+impl<T: fmt::Display + ?Sized> fmt::Display for Watched<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
@@ -157,7 +157,7 @@ impl<T: Clone> Clone for Watched<T> {
 }
 
 #[cfg(feature = "serde")]
-impl<T: serde::Serialize> serde::Serialize for Watched<T> {
+impl<T: serde::Serialize + ?Sized> serde::Serialize for Watched<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer
@@ -167,7 +167,10 @@ impl<T: serde::Serialize> serde::Serialize for Watched<T> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for Watched<T> {
+impl<'de, T> serde::Deserialize<'de> for Watched<T>
+where
+    T: serde::Deserialize<'de> + ?Sized,
+{
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>
@@ -193,7 +196,7 @@ mod watched_ops {
                 }
             }
 
-            impl<'a, T> $imp for &'a Watched<T>
+            impl<'a, T: ?Sized> $imp for &'a Watched<T>
                 where
                     &'a T: $imp
             {
@@ -223,7 +226,8 @@ mod watched_ops {
 
             impl<'a, T, U> $imp<U> for &'a Watched<T>
                 where
-                    &'a T: $imp<U>
+                    T: ?Sized,
+                    &'a T: $imp<U>,
             {
                 type Output = <&'a T as $imp<U>>::Output;
 
@@ -239,7 +243,7 @@ mod watched_ops {
         (impl $imp:ident, $method:ident) => {
             impl<T, U> $imp<U> for Watched<T>
                 where
-                    T: $imp<U>
+                    T: $imp<U> + ?Sized
             {
                 fn $method(&mut self, rhs: U) {
                     let res = $imp::$method(&mut self.value, rhs);
@@ -278,7 +282,8 @@ mod watched_ops {
 
     impl<T, U> PartialEq<U> for Watched<T>
         where
-            T: PartialEq<U>
+            T: PartialEq<U> + ?Sized,
+            U: ?Sized,
     {
         fn eq(&self, other: &U) -> bool {
             self.meta.watched();
@@ -294,7 +299,8 @@ mod watched_ops {
 
     impl<T, U> PartialOrd<U> for Watched<T>
         where
-            T: PartialOrd<U>
+            T: PartialOrd<U> + ?Sized,
+            U: ?Sized,
     {
         fn partial_cmp(&self, other: &U) -> Option<Ordering> {
             self.meta.watched();
