@@ -2,7 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
   * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::cell::RefCell;
+use std::cell::{
+    RefCell,
+};
 use std::ops::{Deref, DerefMut};
 
 use super::{WatchContext, WatchSet};
@@ -38,7 +40,7 @@ impl WatchedMeta {
     /// This function will panic if called outside of WatchContext::with
     pub fn trigger(&mut self) {
         WatchContext::expect_current(|ctx| {
-            ctx.add_to_next(&mut self.watchers.borrow_mut());
+            ctx.add_to_next(self.watchers.get_mut());
         }, "WatchedMeta.trigger() called outside of WatchContext");
     }
 }
@@ -353,6 +355,107 @@ mod watched_ops {
 
     impl<T: Eq> Eq for Watched<T> {}
     */
+}
+
+/// A Watched value which provides interior mutability.  This provides correct
+/// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
+/// would not, and should be slightly more performant than
+/// `RefCell<Watched<T>>`.
+#[derive(Default, )]
+pub struct WatchedCell<T: ?Sized> {
+    inner: RefCell<(WatchSet, T)>,
+}
+
+impl<T: ?Sized> WatchedCell<T> {
+    /// Returns a mutable reference to the watched data.
+    ///
+    /// This call borrows the WatchedCell mutably (at compile-time) which
+    /// guarantees that we possess the only reference.
+    pub fn get_mut(&mut self) -> &mut T {
+        let borrow = self.inner.get_mut();
+        WatchContext::expect_current(|ctx| {
+            ctx.add_to_next(&mut borrow.0);
+        }, "WatchedCell.get_mut() called outside of WatchContext");
+        &mut borrow.1
+    }
+
+    fn update<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        let mut borrow = self.inner.borrow_mut();
+        let ret = f(&mut borrow.1);
+        WatchContext::expect_current(|ctx| {
+            ctx.add_to_next(&mut borrow.0);
+        }, "WatchedCell.update() called outside of WatchContext");
+        WatchContext::try_get_current(|ctx| {
+            if let Some(watch) = ctx.current_watch() {
+                borrow.0.add(watch);
+            }
+        });
+        ret
+    }
+}
+
+impl<T> WatchedCell<T> {
+    /// Create a new WatchedCell
+    pub fn new(value: T) -> Self {
+        Self {
+            inner: RefCell::new((WatchSet::new(), value)),
+        }
+    }
+
+    /// Sets the watched value
+    pub fn set(&self, value: T) {
+        self.replace(value);
+    }
+
+    /// Unwraps the WatchedCell, returning the contained value
+    pub fn into_inner(self) -> T {
+        self.inner.into_inner().1
+    }
+
+    /// Replaces the contained value and returns the previous value
+    pub fn replace(&self, value: T) -> T {
+        self.update(|current| std::mem::replace(current, value))
+    }
+}
+
+impl<T: Copy> WatchedCell<T> {
+    /// Returns a copy of the watched value
+    pub fn get(&self) -> T {
+        WatchContext::try_get_current(|ctx| {
+            if let Some(watch) = ctx.current_watch() {
+                self.inner.borrow_mut().0.add(watch);
+            }
+        });
+        self.inner.borrow().1
+    }
+}
+
+impl<T: Default> WatchedCell<T> {
+    /// Takes the watched value, leaving `Default::default()` in its place
+    pub fn take(&self) -> T {
+        self.update(|current| std::mem::take(current))
+    }
+}
+
+impl<T: Copy> Clone for WatchedCell<T> {
+    fn clone(&self) -> Self {
+        WatchContext::try_get_current(|ctx| {
+            if let Some(watch) = ctx.current_watch() {
+                self.inner.borrow_mut().0.add(watch);
+            }
+        });
+        let clone = self.inner.borrow().1;
+        Self::new(clone)
+    }
+}
+
+impl<T> From<T> for WatchedCell<T> {
+    fn from(value: T) -> Self {
+        Self::new(value)
+    }
 }
 
 #[cfg(test)]

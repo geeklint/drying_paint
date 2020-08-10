@@ -156,7 +156,7 @@ pub use context::WatchContext;
 
 mod watched;
 pub use watched::{
-    WatchedMeta, Watched
+    WatchedMeta, Watched, WatchedCell,
 };
 
 mod pointer;
