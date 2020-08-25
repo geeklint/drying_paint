@@ -379,6 +379,15 @@ impl<T: ?Sized> WatchedCell<T> {
         &mut borrow.1
     }
 
+    /// Treat this WatchedCell as watched, without fetching the actual value.
+    pub fn watched(&self) {
+        WatchContext::try_get_current(|ctx| {
+            if let Some(watch) = ctx.current_watch() {
+                self.inner.borrow_mut().0.add(watch);
+            }
+        });
+    }
+
     fn update<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
