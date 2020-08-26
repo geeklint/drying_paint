@@ -261,4 +261,35 @@ mod tests {
         std::mem::drop(ctx);
     }
 
+
+    #[derive(Default)]
+    struct MutsTwice {
+        value: Watched<i32>,
+    }
+
+    impl WatcherInit for MutsTwice {
+        fn init(watcher: &mut WatcherMeta<Self>) {
+            watcher.watch(|root| {
+                root.value += 1;
+                root.value += 1;
+            });
+        }
+
+    }
+
+    #[test]
+    fn double_mut_in_watch() {
+        let mut ctx = WatchContext::new();
+        ctx.set_frame_limit(Some(100));
+        ctx = ctx.with(|| {
+            let watcher: Watcher<MutsTwice> = WatchContext::allow_watcher_access((), |()| {
+                Watcher::new()
+            });
+            WatchContext::update_current();
+            WatchContext::allow_watcher_access(watcher, move |watcher| {
+                assert_eq!(watcher.data().value, 2);
+            });
+        }).0;
+        std::mem::drop(ctx);
+    }
 }
