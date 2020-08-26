@@ -110,16 +110,21 @@ impl WatchSet {
         self.vec.push(Some(watch));
     }
 
-    pub fn add_all(&mut self, other: &mut WatchSet) {
+    pub fn add_all<F>(&mut self, other: &mut WatchSet, mut filter: F)
+    where
+        F: FnMut(&WatchRef) -> bool,
+    {
         let mut src = other.vec.iter_mut();
         for dest_bucket in self.vec.iter_mut() {
             if dest_bucket.is_none() {
                 loop {
                     if let Some(bucket) = src.next() {
                         if let Some(watch) = bucket.take() {
-                            self.empty = false;
-                            *dest_bucket = Some(watch);
-                            break;
+                            if filter(&watch) {
+                                self.empty = false;
+                                *dest_bucket = Some(watch);
+                                break;
+                            }
                         }
                     } else {
                         other.empty = true;
@@ -130,8 +135,10 @@ impl WatchSet {
         }
         for bucket in src {
             if let Some(watch) = bucket.take() {
-                self.empty = false;
-                self.vec.push(Some(watch));
+                if filter(&watch) {
+                    self.empty = false;
+                    self.vec.push(Some(watch));
+                }
             }
         }
         other.empty = true;

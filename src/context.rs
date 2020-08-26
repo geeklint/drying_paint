@@ -199,7 +199,8 @@ impl WatchContext {
     }
     
     pub(crate) fn add_to_next(&self, set: &mut WatchSet) {
-        self.back_frame.borrow_mut().add_all(set);
+        let mut next_set = self.back_frame.borrow_mut();
+        next_set.add_all(set, |_| true);
     }
 }
 
