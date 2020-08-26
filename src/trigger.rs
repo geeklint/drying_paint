@@ -67,6 +67,10 @@ pub struct WatchRef {
 }
 
 impl WatchRef {
+    pub fn watch_eq(&self, other: &Self) -> bool {
+        self.watch.ptr_eq(&other.watch)
+    }
+
     fn trigger(self) {
         if let Some(watch) = self.watch.upgrade() {
             if self.cycle == watch.cycle.get() {
