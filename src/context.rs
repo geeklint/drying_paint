@@ -198,7 +198,7 @@ impl WatchContext {
         Some(self.watching_stack.borrow().last()?.clone())
     }
     
-    pub(crate) fn add_to_next(&self, set: &mut WatchSet) {
+    pub(crate) fn add_to_next(&self, set: &WatchSet) {
         match self.watching_stack.borrow().last() {
             Some(watch) => {
                 self.back_frame.add_all(set, |to_add| !to_add.watch_eq(watch));

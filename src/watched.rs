@@ -38,9 +38,9 @@ impl WatchedMeta {
     /// be marked as needing to be updated.
     /// # Panics
     /// This function will panic if called outside of WatchContext::with
-    pub fn trigger(&mut self) {
+    pub fn trigger(&self) {
         WatchContext::expect_current(|ctx| {
-            ctx.add_to_next(&mut self.watchers);
+            ctx.add_to_next(&self.watchers);
         }, "WatchedMeta.trigger() called outside of WatchContext");
     }
 }
