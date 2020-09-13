@@ -33,8 +33,8 @@ thread_local! {
 /// or Watcher::data_mut() around during WatchContext::update_current()
 /// or WatchContext::update().
 pub struct WatchContext {
-    front_frame: RefCell<WatchSet>,
-    back_frame: RefCell<WatchSet>,
+    front_frame: WatchSet,
+    back_frame: WatchSet,
     watching_stack: RefCell<Vec<WatchRef>>,
     frame_limit: Option<usize>,
 }
@@ -48,8 +48,8 @@ impl WatchContext {
             None
         };
         WatchContext {
-            front_frame: RefCell::new(WatchSet::new()),
-            back_frame: RefCell::new(WatchSet::new()),
+            front_frame: WatchSet::new(),
+            back_frame: WatchSet::new(),
             watching_stack: RefCell::new(Vec::new()),
             frame_limit,
         }
@@ -159,10 +159,10 @@ impl WatchContext {
 
     fn internal_update(&self) {
         if let Some(mut frame_limit) = self.frame_limit {
-            while !self.back_frame.borrow().empty() {
+            while !self.back_frame.empty() {
                 if frame_limit == 0 {
                     let current_watch_names = {
-                        self.back_frame.borrow().debug_names()
+                        self.back_frame.debug_names()
                     };
                     panic!(
                         "Updating a WatchContext exceeded it's \
@@ -177,13 +177,13 @@ impl WatchContext {
                     );
                 }
                 self.front_frame.swap(&self.back_frame);
-                self.front_frame.borrow_mut().trigger();
+                self.front_frame.trigger();
                 frame_limit -= 1;
             }
         } else {
-            while !self.back_frame.borrow().empty() {
+            while !self.back_frame.empty() {
                 self.front_frame.swap(&self.back_frame);
-                self.front_frame.borrow_mut().trigger();
+                self.front_frame.trigger();
             }
         }
     }
@@ -199,13 +199,12 @@ impl WatchContext {
     }
     
     pub(crate) fn add_to_next(&self, set: &mut WatchSet) {
-        let mut next_set = self.back_frame.borrow_mut();
         match self.watching_stack.borrow().last() {
             Some(watch) => {
-                next_set.add_all(set, |to_add| !to_add.watch_eq(watch));
+                self.back_frame.add_all(set, |to_add| !to_add.watch_eq(watch));
             },
             None => {
-                next_set.add_all(set, |_| true);
+                self.back_frame.add_all(set, |_| true);
             },
         };
     }

@@ -15,13 +15,13 @@ use super::{WatchContext, WatchSet};
 /// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
 #[derive(Default)]
 pub struct WatchedMeta {
-    watchers: RefCell<WatchSet>,
+    watchers: WatchSet,
 }
 
 impl WatchedMeta {
     /// Create a new WatchedMeta instance
     pub fn new() -> Self {
-        WatchedMeta { watchers: RefCell::new(WatchSet::new()) }
+        WatchedMeta { watchers: WatchSet::new() }
     }
 
     /// When run in a function designed to watch a value, will bind so that
@@ -29,7 +29,7 @@ impl WatchedMeta {
     pub fn watched(&self) {
         WatchContext::try_get_current(|ctx| {
             if let Some(watch) = ctx.current_watch() {
-                self.watchers.borrow_mut().add(watch);
+                self.watchers.add(watch);
             }
         });
     }
@@ -40,7 +40,7 @@ impl WatchedMeta {
     /// This function will panic if called outside of WatchContext::with
     pub fn trigger(&mut self) {
         WatchContext::expect_current(|ctx| {
-            ctx.add_to_next(self.watchers.get_mut());
+            ctx.add_to_next(&mut self.watchers);
         }, "WatchedMeta.trigger() called outside of WatchContext");
     }
 }
@@ -551,5 +551,13 @@ mod tests {
             });
         }).0;
         std::mem::drop(ctx);
+    }
+
+    #[test]
+    fn watched_reasonably_sized() {
+        assert_eq!(
+            std::mem::size_of::<Watched<usize>>(),
+            2 * std::mem::size_of::<usize>(),
+        );
     }
 }

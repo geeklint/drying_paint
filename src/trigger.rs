@@ -174,6 +174,10 @@ impl WatchSet {
             names.join("\n  ")
         })
     }
+
+    pub fn swap(&self, other: &WatchSet) {
+        Cell::swap(&self.list, &other.list);
+    }
 }
 
 impl Default for WatchSet {
