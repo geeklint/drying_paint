@@ -87,79 +87,92 @@ impl WatchRef {
     }
 }
 
+#[derive(Default)]
+struct WatchSetNode {
+    data: [Option<WatchRef>; 4],  // TODO: analyse better len here?
+    next: Option<Box<WatchSetNode>>,
+}
+
 pub struct WatchSet {
-    empty: bool,
-    vec: Vec<Option<WatchRef>>,
+    list: Cell<Option<Box<WatchSetNode>>>,
 }
 
 impl WatchSet {
     pub fn new() -> Self {
-        WatchSet { empty: true, vec: Vec::new() }
+        WatchSet { list: Cell::new(None) }
     }
 
-    pub fn empty(&self) -> bool { self.empty }
-
-    pub fn add(&mut self, watch: WatchRef) {
-        self.empty = false;
-        for bucket in self.vec.iter_mut() {
-            if bucket.is_none() {
-                *bucket = Some(watch);
-                return;
-            }
-        }
-        self.vec.push(Some(watch));
-    }
-
-    pub fn add_all<F>(&mut self, other: &mut WatchSet, mut filter: F)
+    fn with<F, R>(&self, func: F) -> R
     where
-        F: FnMut(&WatchRef) -> bool,
+        F: FnOnce(&mut Option<Box<WatchSetNode>>) -> R,
     {
-        let mut src = other.vec.iter_mut();
-        for dest_bucket in self.vec.iter_mut() {
-            if dest_bucket.is_none() {
-                loop {
-                    if let Some(bucket) = src.next() {
-                        if let Some(watch) = bucket.take() {
-                            if filter(&watch) {
-                                self.empty = false;
-                                *dest_bucket = Some(watch);
-                                break;
-                            }
-                        }
-                    } else {
-                        other.empty = true;
+        let mut list = self.list.replace(None);
+        let ret = func(&mut list);
+        self.list.set(list);
+        ret
+    }
+
+    pub fn empty(&self) -> bool {
+        self.with(|list| list.is_none())
+    }
+
+    pub fn add(&self, watch: WatchRef) {
+        self.with(|list| {
+            loop {
+                let node = list.get_or_insert_with(Box::default);
+                for bucket in node.data.iter_mut() {
+                    if bucket.is_none() {
+                        *bucket = Some(watch);
                         return;
                     }
                 }
+                let mut new = Box::new(WatchSetNode::default());
+                new.next = list.take();
+                *list = Some(new);
             }
-        }
-        for bucket in src {
-            if let Some(watch) = bucket.take() {
-                if filter(&watch) {
-                    self.empty = false;
-                    self.vec.push(Some(watch));
-                }
-            }
-        }
-        other.empty = true;
+        });
     }
 
-    pub fn trigger(&mut self) {
-        for bucket in self.vec.iter_mut() {
-            if let Some(watch) = bucket.take() {
-                watch.trigger();
+    pub fn add_all<F>(&self, other: &WatchSet, mut filter: F)
+    where
+        F: FnMut(&WatchRef) -> bool,
+    {
+        let mut other_list = other.list.take();
+        while let Some(mut node) = other_list {
+            for bucket in node.data.iter_mut() {
+                if let Some(watch) = bucket.take() {
+                    if filter(&watch) {
+                        self.add(watch);
+                    }
+                }
             }
+            other_list = node.next;
         }
-        self.empty = true;
+    }
+
+    pub fn trigger(&self) {
+        let mut list = self.list.take();
+        while let Some(mut node) = list {
+            for bucket in node.data.iter_mut() {
+                if let Some(watch) = bucket.take() {
+                    watch.trigger();
+                }
+            }
+            list = node.next;
+        }
     }
 
     pub fn debug_names(&self) -> String {
-        self.vec.iter()
-            .filter_map(|bucket| {
-                bucket.as_ref().map(|watch| watch.debug_name)
-            })
-            .collect::<Vec<_>>()
-            .join("\n  ")
+        self.with(|mut list| {
+            let mut names = Vec::new();
+            while let Some(node) = list {
+                names.extend(node.data.iter().filter_map(|bucket| {
+                    bucket.as_ref().map(|watch| watch.debug_name)
+                }));
+                list = &mut node.next;
+            }
+            names.join("\n  ")
+        })
     }
 }
 
