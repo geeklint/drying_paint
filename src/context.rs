@@ -141,11 +141,14 @@ impl WatchContext {
         crate::pointer::BorrowedPointer::allow_refs(data, func)
     }
 
-    pub(crate) fn expect_current<F: FnOnce(&WatchContext)>(func: F, msg: &str) {
+    pub(crate) fn expect_current<F, R>(func: F, msg: &str) -> R
+    where
+        F: FnOnce(&WatchContext) -> R,
+    {
         CTX_STACK.with(|stack| {
             let borrow = stack.borrow();
-            (func)(borrow.last().expect(msg));
-        });
+            (func)(borrow.last().expect(msg))
+        })
     }
 
     pub(crate) fn try_get_current<F: FnOnce(&WatchContext)>(func: F) {
