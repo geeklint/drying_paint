@@ -1,6 +1,6 @@
 [package]
 name = "drying_paint"
-version = "0.4.5"
+version = "0.4.6-dev0"
 authors = ["Violet <violet@geeklint.com>"]
 edition = "2018"
 
