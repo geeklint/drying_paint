@@ -43,7 +43,7 @@ impl WatchContext {
     /// Create a new WatchContext
     pub fn new() -> Self {
         let frame_limit = if cfg!(debug_assertions) {
-            Some(16_384)
+            Some(1024)
         } else {
             None
         };
