@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 
 use super::{WatchSet, WatchRef};
+use super::channels::ChannelsContext;
 
 thread_local! {
     static CTX_STACK: RefCell<Vec<WatchContext>> = RefCell::new(Vec::new());
@@ -37,6 +38,7 @@ pub struct WatchContext {
     back_frame: WatchSet,
     watching_stack: RefCell<Vec<WatchRef>>,
     frame_limit: Option<usize>,
+    chan_ctx: ChannelsContext,
 }
 
 impl WatchContext {
@@ -52,6 +54,7 @@ impl WatchContext {
             back_frame: WatchSet::new(),
             watching_stack: RefCell::new(Vec::new()),
             frame_limit,
+            chan_ctx: ChannelsContext::default(),
         }
     }
 
@@ -160,7 +163,12 @@ impl WatchContext {
         });
     }
 
+    pub(crate) fn channels_context(&self) -> &ChannelsContext {
+        &self.chan_ctx
+    }
+
     fn internal_update(&self) {
+        self.chan_ctx.check_for_activity();
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.back_frame.empty() {
                 if frame_limit == 0 {

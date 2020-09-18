@@ -171,6 +171,13 @@ pub use event::{
     WatchedEvent
 };
 
+mod channels;
+pub use channels::{
+    watched_channel,
+    WatchedSender,
+    WatchedReceiver,
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
