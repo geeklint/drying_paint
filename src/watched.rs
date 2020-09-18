@@ -69,6 +69,14 @@ impl<T> Watched<T> {
     }
 }
 
+impl<T: ?Sized> Watched<T> {
+    /// Get a referenced to the wrapped value, without binding the current
+    /// watch closure.
+    pub fn get_unwatched(this: &Self) -> &T {
+        &this.value
+    }
+}
+
 impl<T: Default> Watched<T> {
     /// Takes the wrapped value, leaving `Default::default()` in its place.
     pub fn take(&mut self) -> T {
