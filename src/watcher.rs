@@ -14,7 +14,7 @@ struct WatcherMetaBase<T: ?Sized> {
 /// function of WatcherInit, the trait which is required to be implemented by
 /// the data stored in Watchers.
 pub struct WatcherMeta<'a, T: ?Sized> {
-    base: WatcherMetaBase<T>,
+    base: &'a mut WatcherMetaBase<T>,
     debug_name: &'static str,
     key_data: &'a mut T,
 }
@@ -73,20 +73,20 @@ impl<T: WatcherInit> Watcher<T> {
     /// rules.
     pub fn create(data: T) -> Self {
         let mut data = OwnedPointer::new(data);
-        let meta_base = WatcherMetaBase {
+        let mut meta_base = WatcherMetaBase {
             data: data.new_borrowed(),
             watches: Vec::new(),
         };
-        let meta = {
-            let mut meta = WatcherMeta {
-                base: meta_base,
-                debug_name: std::any::type_name::<T>(),
-                key_data: &mut data.as_mut(),
-            };
-            WatcherInit::init(&mut meta);
-            meta.base
+        let mut meta = WatcherMeta {
+            base: &mut meta_base,
+            debug_name: std::any::type_name::<T>(),
+            key_data: &mut data.as_mut(),
         };
-        Watcher { data, _meta: meta }
+        WatcherInit::init(&mut meta);
+        Watcher {
+            data,
+            _meta: meta_base,
+        }
     }
 
     /// Consume the Watcher and return the data stored inside. Watch callbacks
