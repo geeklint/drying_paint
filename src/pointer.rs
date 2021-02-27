@@ -1,6 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! This module exposes a smart pointer type with specific usage patterns.
 //! It allows a subset of the sharing that std::rc::Rc does: There is one
@@ -33,14 +33,8 @@
 // TODO: UnsafeCell in this mod can probably be removed and instances replaced
 // with Rc::get_unchecked_mut once that API is stablized
 
-use std::rc::{
-    Rc,
-    Weak,
-};
-use std::cell::{
-    Cell,
-    UnsafeCell,
-};
+use std::cell::{Cell, UnsafeCell};
+use std::rc::{Rc, Weak};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BorrowState {
@@ -75,7 +69,9 @@ impl BorrowGuard {
                 "Attempt to create BorrowGuard::new when a BorrowGuard is already in use"
             );
             cell.set(BorrowState::Borrowed(ptr));
-            Self { _marker: std::marker::PhantomData }
+            Self {
+                _marker: std::marker::PhantomData,
+            }
         })
     }
 
@@ -87,7 +83,9 @@ impl BorrowGuard {
                 "Attempt to create BorrowGuard::block when a BorrowGuard is already in use"
             );
             cell.set(BorrowState::BorrowsBlocked);
-            Self { _marker: std::marker::PhantomData }
+            Self {
+                _marker: std::marker::PhantomData,
+            }
         })
     }
 
@@ -120,17 +118,13 @@ impl<T: ?Sized> OwnedPointer<T> {
     pub fn as_ref(&self) -> &T {
         let raw = Rc::as_ptr(&self.ptr);
         BorrowGuard::assert_owned_borrows_allowed(raw as *const ());
-        unsafe {
-            &*self.ptr.get()
-        }
+        unsafe { &*self.ptr.get() }
     }
 
     pub fn as_mut(&mut self) -> &mut T {
         let raw = Rc::as_ptr(&self.ptr);
         BorrowGuard::assert_owned_borrows_allowed(raw as *const ());
-        unsafe {
-            &mut *self.ptr.get()
-        }
+        unsafe { &mut *self.ptr.get() }
     }
 
     pub fn new_borrowed(&self) -> BorrowedPointer<T> {
@@ -142,14 +136,18 @@ impl<T: ?Sized> OwnedPointer<T> {
 
 impl<T> OwnedPointer<T> {
     pub fn new(data: T) -> Self {
-        Self { ptr: Rc::new(UnsafeCell::new(data)) }
+        Self {
+            ptr: Rc::new(UnsafeCell::new(data)),
+        }
     }
 
     pub fn into_inner(self) -> T {
         if let Ok(cell) = Rc::try_unwrap(self.ptr) {
             cell.into_inner()
         } else {
-            panic!("OwnedPointer::into_inner called while there were other refs")
+            panic!(
+                "OwnedPointer::into_inner called while there were other refs"
+            )
         }
     }
 }
@@ -198,9 +196,7 @@ impl<T: 'static> BorrowedPointer<T> {
     pub fn into_any(self) -> BorrowedPointer<dyn std::any::Any> {
         // TODO: this can probably be removed when CoerceUnsized
         // gets stablized
-        BorrowedPointer {
-            ptr: self.ptr,
-        }
+        BorrowedPointer { ptr: self.ptr }
     }
 }
 

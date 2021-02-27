@@ -1,6 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::cell::Cell;
 use std::ops::{Deref, DerefMut};
@@ -19,7 +19,9 @@ pub struct WatchedMeta {
 impl WatchedMeta {
     /// Create a new WatchedMeta instance
     pub fn new() -> Self {
-        WatchedMeta { watchers: WatchSet::new() }
+        WatchedMeta {
+            watchers: WatchSet::new(),
+        }
     }
 
     /// When run in a function designed to watch a value, will bind so that
@@ -37,9 +39,12 @@ impl WatchedMeta {
     /// # Panics
     /// This function will panic if called outside of WatchContext::with
     pub fn trigger(&self) {
-        WatchContext::expect_current(|ctx| {
-            ctx.add_to_next(&self.watchers);
-        }, "WatchedMeta.trigger() called outside of WatchContext");
+        WatchContext::expect_current(
+            |ctx| {
+                ctx.add_to_next(&self.watchers);
+            },
+            "WatchedMeta.trigger() called outside of WatchContext",
+        );
     }
 }
 
@@ -54,7 +59,10 @@ pub struct Watched<T: ?Sized> {
 impl<T> Watched<T> {
     /// Create a new watched value.
     pub fn new(value: T) -> Self {
-        Watched { value, meta: WatchedMeta::new() }
+        Watched {
+            value,
+            meta: WatchedMeta::new(),
+        }
     }
 
     /// Consumes the `Watched`, returning the wrapped value
@@ -144,7 +152,6 @@ impl<T: ?Sized> Deref for Watched<T> {
     }
 }
 
-
 impl<T: ?Sized> DerefMut for Watched<T> {
     fn deref_mut(&mut self) -> &mut T {
         self.meta.trigger();
@@ -186,7 +193,7 @@ impl<T: Clone> Clone for Watched<T> {
 impl<T: serde::Serialize + ?Sized> serde::Serialize for Watched<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
         T::serialize(&self.value, serializer)
     }
@@ -199,7 +206,7 @@ where
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self::new)
     }
@@ -223,8 +230,8 @@ mod watched_ops {
             }
 
             impl<'a, T: ?Sized> $imp for &'a Watched<T>
-                where
-                    &'a T: $imp
+            where
+                &'a T: $imp,
             {
                 type Output = <&'a T as $imp>::Output;
 
@@ -233,14 +240,14 @@ mod watched_ops {
                     $imp::$method(&self.value)
                 }
             }
-        }
+        };
     }
 
     macro_rules! watched_binop {
         (impl $imp:ident, $method:ident) => {
             impl<T, U> $imp<U> for Watched<T>
-                where
-                    T: $imp<U>
+            where
+                T: $imp<U>,
             {
                 type Output = <T as $imp<U>>::Output;
 
@@ -251,9 +258,9 @@ mod watched_ops {
             }
 
             impl<'a, T, U> $imp<U> for &'a Watched<T>
-                where
-                    T: ?Sized,
-                    &'a T: $imp<U>,
+            where
+                T: ?Sized,
+                &'a T: $imp<U>,
             {
                 type Output = <&'a T as $imp<U>>::Output;
 
@@ -262,14 +269,14 @@ mod watched_ops {
                     $imp::$method(&self.value, other)
                 }
             }
-        }
+        };
     }
 
     macro_rules! watched_binop_assign {
         (impl $imp:ident, $method:ident) => {
             impl<T, U> $imp<U> for Watched<T>
-                where
-                    T: $imp<U> + ?Sized
+            where
+                T: $imp<U> + ?Sized,
             {
                 fn $method(&mut self, rhs: U) {
                     let res = $imp::$method(&mut self.value, rhs);
@@ -278,7 +285,7 @@ mod watched_ops {
                     res
                 }
             }
-        }
+        };
     }
 
     watched_unop!(impl Neg, neg);
@@ -307,9 +314,9 @@ mod watched_ops {
     watched_binop_assign!(impl SubAssign, sub_assign);
 
     impl<T, U> PartialEq<U> for Watched<T>
-        where
-            T: PartialEq<U> + ?Sized,
-            U: ?Sized,
+    where
+        T: PartialEq<U> + ?Sized,
+        U: ?Sized,
     {
         fn eq(&self, other: &U) -> bool {
             self.meta.watched();
@@ -324,9 +331,9 @@ mod watched_ops {
     }
 
     impl<T, U> PartialOrd<U> for Watched<T>
-        where
-            T: PartialOrd<U> + ?Sized,
-            U: ?Sized,
+    where
+        T: PartialOrd<U> + ?Sized,
+        U: ?Sized,
     {
         fn partial_cmp(&self, other: &U) -> Option<Ordering> {
             self.meta.watched();
@@ -367,7 +374,7 @@ mod watched_ops {
 /// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
 /// would not, and should be slightly more performant than
 /// `RefCell<Watched<T>>`.
-#[derive(Default, )]
+#[derive(Default)]
 pub struct WatchedCell<T: ?Sized> {
     meta: WatchedMeta,
     value: Cell<T>,
@@ -482,23 +489,26 @@ mod tests {
     #[test]
     fn test_add_to_watched() {
         let mut ctx = WatchContext::new();
-        ctx = ctx.with(|| {
-            let outer = WatchContext::allow_watcher_access((), |()| {
-                let mut outer = Outer::new();
-                *outer.data_mut().inner.value = 587;
-                outer
-            });
-            WatchContext::update_current();
-            let outer = WatchContext::allow_watcher_access(outer, |mut outer| {
-                assert_eq!(outer.data().value, 587);
-                outer.data_mut().inner.value += 13;
-                outer
-            });
-            WatchContext::update_current();
-            WatchContext::allow_watcher_access(outer, |outer| {
-                assert_eq!(outer.data().value, 600);
-            });
-        }).0;
+        ctx = ctx
+            .with(|| {
+                let outer = WatchContext::allow_watcher_access((), |()| {
+                    let mut outer = Outer::new();
+                    *outer.data_mut().inner.value = 587;
+                    outer
+                });
+                WatchContext::update_current();
+                let outer =
+                    WatchContext::allow_watcher_access(outer, |mut outer| {
+                        assert_eq!(outer.data().value, 587);
+                        outer.data_mut().inner.value += 13;
+                        outer
+                    });
+                WatchContext::update_current();
+                WatchContext::allow_watcher_access(outer, |outer| {
+                    assert_eq!(outer.data().value, 600);
+                });
+            })
+            .0;
         std::mem::drop(ctx);
     }
 
@@ -519,17 +529,19 @@ mod tests {
     #[test]
     fn test_xor_watch() {
         let mut ctx = WatchContext::new();
-        ctx = ctx.with(|| {
-            let outer = WatchContext::allow_watcher_access((), |()| {
-                let mut outer = Watcher::<OuterXorData>::new();
-                *outer.data_mut().inner.value = 960294194;
-                outer
-            });
-            WatchContext::update_current();
-            WatchContext::allow_watcher_access(outer, |outer| {
-                assert_eq!(outer.data().value, 3334673101);
-            });
-        }).0;
+        ctx = ctx
+            .with(|| {
+                let outer = WatchContext::allow_watcher_access((), |()| {
+                    let mut outer = Watcher::<OuterXorData>::new();
+                    *outer.data_mut().inner.value = 960294194;
+                    outer
+                });
+                WatchContext::update_current();
+                WatchContext::allow_watcher_access(outer, |outer| {
+                    assert_eq!(outer.data().value, 3334673101);
+                });
+            })
+            .0;
         std::mem::drop(ctx);
     }
 

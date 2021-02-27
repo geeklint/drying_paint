@@ -1,11 +1,11 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use std::cell::RefCell;
 
-use super::{WatchSet, WatchRef};
 use super::channels::ChannelsContext;
+use super::{WatchRef, WatchSet};
 
 thread_local! {
     static CTX_STACK: RefCell<Vec<WatchContext>> = RefCell::new(Vec::new());
@@ -70,7 +70,7 @@ impl WatchContext {
     }
 
     /// Execute all operations which are currently pending because a value
-    /// they were watching changed. 
+    /// they were watching changed.
     /// Note: Because Watcher makes use of a RefCell internally to execute
     /// the watching code, you should not keep references gotten from
     /// Watcher::data() or Watcher::data_mut() around during
@@ -81,9 +81,12 @@ impl WatchContext {
     /// if any function queued for update panics or if the limit set by
     /// set_frame_limit is exceeded.
     pub fn update_current() {
-        Self::expect_current(|ctx| {
-            ctx.internal_update();
-        }, "WatchContext::update_current() called outside of WatchContext");
+        Self::expect_current(
+            |ctx| {
+                ctx.internal_update();
+            },
+            "WatchContext::update_current() called outside of WatchContext",
+        );
     }
 
     /// The same as doing `context.with(|| WatchContext::update_current())`
@@ -172,9 +175,7 @@ impl WatchContext {
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.back_frame.empty() {
                 if frame_limit == 0 {
-                    let current_watch_names = {
-                        self.back_frame.debug_names()
-                    };
+                    let current_watch_names = self.back_frame.debug_names();
                     panic!(
                         "Updating a WatchContext exceeded it's \
                         limit for iteration.  This usually means there is a \
@@ -208,15 +209,16 @@ impl WatchContext {
     pub(crate) fn current_watch(&self) -> Option<WatchRef> {
         Some(self.watching_stack.borrow().last()?.clone())
     }
-    
+
     pub(crate) fn add_to_next(&self, set: &WatchSet) {
         match self.watching_stack.borrow().last() {
             Some(watch) => {
-                self.back_frame.add_all(set, |to_add| !to_add.watch_eq(watch));
-            },
+                self.back_frame
+                    .add_all(set, |to_add| !to_add.watch_eq(watch));
+            }
             None => {
                 self.back_frame.add_all(set, |_| true);
-            },
+            }
         };
     }
 }

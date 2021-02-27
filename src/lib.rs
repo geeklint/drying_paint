@@ -1,6 +1,6 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! The name 'drying_paint' comes from the expression "watching paint dry".
 //! This module provides a system to "watch" some values for changes and run
@@ -106,7 +106,7 @@
 //! #     }).0;
 //! # }
 //! ```
-//! Creating watchers and setting watched data needs to happen within a 
+//! Creating watchers and setting watched data needs to happen within a
 //! WatchContext. WatchContext::update_current() will cause all the pending
 //! watcher code to run.  WatchContext::allow_watcher_access() is used to
 //! create and access the Watcher,  This is required in order to comply with
@@ -144,7 +144,6 @@
 //! }
 //! ```
 
-
 #![warn(missing_docs)]
 #![allow(clippy::needless_doctest_main)]
 
@@ -155,28 +154,18 @@ mod context;
 pub use context::WatchContext;
 
 mod watched;
-pub use watched::{
-    WatchedMeta, Watched, WatchedCell,
-};
+pub use watched::{Watched, WatchedCell, WatchedMeta};
 
 mod pointer;
 
 mod watcher;
-pub use watcher::{
-    WatcherMeta, WatcherInit, Watcher, WatcherId
-};
+pub use watcher::{Watcher, WatcherId, WatcherInit, WatcherMeta};
 
 mod event;
-pub use event::{
-    WatchedEvent
-};
+pub use event::WatchedEvent;
 
 mod channels;
-pub use channels::{
-    watched_channel,
-    WatchedSender,
-    WatchedReceiver,
-};
+pub use channels::{watched_channel, WatchedReceiver, WatchedSender};
 
 #[cfg(test)]
 mod tests {
@@ -212,17 +201,19 @@ mod tests {
     #[test]
     fn test_propogate() {
         let mut ctx = WatchContext::new();
-        ctx = ctx.with(|| {
-            let outer = WatchContext::allow_watcher_access((), |()| {
-                let mut outer = Outer::new();
-                outer.data_mut().set_inner(37);
-                outer
-            });
-            WatchContext::update_current();
-            WatchContext::allow_watcher_access(outer, |outer| {
-                assert_eq!(outer.data().value, 37);
-            });
-        }).0;
+        ctx = ctx
+            .with(|| {
+                let outer = WatchContext::allow_watcher_access((), |()| {
+                    let mut outer = Outer::new();
+                    outer.data_mut().set_inner(37);
+                    outer
+                });
+                WatchContext::update_current();
+                WatchContext::allow_watcher_access(outer, |outer| {
+                    assert_eq!(outer.data().value, 37);
+                });
+            })
+            .0;
         std::mem::drop(ctx);
     }
 
@@ -243,31 +234,37 @@ mod tests {
     #[test]
     fn test_meta_id() {
         let mut ctx = WatchContext::new();
-        ctx = ctx.with(|| {
-            let watcher: Watcher<InnerId> = WatchContext::allow_watcher_access((), |()| {
-                Watcher::new()
-            });
-            let watcher_id = Some(watcher.id());
-            let (watcher, watcher_id) = WatchContext::allow_watcher_access(
-                (watcher, watcher_id),
-                |(watcher, watcher_id)| {
-                    assert_eq!(watcher.data().value, watcher_id);
-                    (watcher, watcher_id)
-                }
-            );
+        ctx = ctx
+            .with(|| {
+                let watcher: Watcher<InnerId> =
+                    WatchContext::allow_watcher_access((), |()| {
+                        Watcher::new()
+                    });
+                let watcher_id = Some(watcher.id());
+                let (watcher, watcher_id) = WatchContext::allow_watcher_access(
+                    (watcher, watcher_id),
+                    |(watcher, watcher_id)| {
+                        assert_eq!(watcher.data().value, watcher_id);
+                        (watcher, watcher_id)
+                    },
+                );
 
-            let other: Watcher<InnerId> = WatchContext::allow_watcher_access((), |()| {
-                Watcher::new()
-            });
-            let other_id = Some(other.id());
-            WatchContext::allow_watcher_access((watcher, other), move |(watcher, other)| {
-                assert_ne!(other.data().value, watcher_id);
-                assert_ne!(watcher.data().value, other_id);
-            });
-        }).0;
+                let other: Watcher<InnerId> =
+                    WatchContext::allow_watcher_access((), |()| {
+                        Watcher::new()
+                    });
+                let other_id = Some(other.id());
+                WatchContext::allow_watcher_access(
+                    (watcher, other),
+                    move |(watcher, other)| {
+                        assert_ne!(other.data().value, watcher_id);
+                        assert_ne!(watcher.data().value, other_id);
+                    },
+                );
+            })
+            .0;
         std::mem::drop(ctx);
     }
-
 
     #[derive(Default)]
     struct MutsTwice {
@@ -281,22 +278,24 @@ mod tests {
                 root.value += 1;
             });
         }
-
     }
 
     #[test]
     fn double_mut_in_watch() {
         let mut ctx = WatchContext::new();
         ctx.set_frame_limit(Some(100));
-        ctx = ctx.with(|| {
-            let watcher: Watcher<MutsTwice> = WatchContext::allow_watcher_access((), |()| {
-                Watcher::new()
-            });
-            WatchContext::update_current();
-            WatchContext::allow_watcher_access(watcher, move |watcher| {
-                assert_eq!(watcher.data().value, 2);
-            });
-        }).0;
+        ctx = ctx
+            .with(|| {
+                let watcher: Watcher<MutsTwice> =
+                    WatchContext::allow_watcher_access((), |()| {
+                        Watcher::new()
+                    });
+                WatchContext::update_current();
+                WatchContext::allow_watcher_access(watcher, move |watcher| {
+                    assert_eq!(watcher.data().value, 2);
+                });
+            })
+            .0;
         std::mem::drop(ctx);
     }
 }

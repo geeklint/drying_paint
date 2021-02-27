@@ -4,7 +4,7 @@
 
 use std::sync::{atomic, mpsc, Arc};
 
-use super::{WatchedMeta, WatchContext};
+use super::{WatchContext, WatchedMeta};
 
 #[derive(Default)]
 pub(crate) struct ChannelsContext {
@@ -96,9 +96,10 @@ impl ChannelsContext {
 /// }
 /// ```
 pub fn watched_channel<T>() -> (WatchedSender<T>, WatchedReceiver<T>) {
-    let flag = WatchContext::expect_current(|ctx| {
-        Arc::clone(&ctx.channels_context().flag)
-    }, "watched_channel called outside WatchContext");
+    let flag = WatchContext::expect_current(
+        |ctx| Arc::clone(&ctx.channels_context().flag),
+        "watched_channel called outside WatchContext",
+    );
     let (sender, receiver) = mpsc::channel::<T>();
     (
         WatchedSender {
@@ -108,7 +109,7 @@ pub fn watched_channel<T>() -> (WatchedSender<T>, WatchedReceiver<T>) {
         WatchedReceiver {
             inner: receiver,
             _notsend: std::marker::PhantomData,
-        }
+        },
     )
 }
 

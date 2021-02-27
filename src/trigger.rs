@@ -1,14 +1,12 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
+use std::rc::{Rc, Weak};
 
-use crate::pointer::{
-    BorrowedPointer,
-};
 use super::WatchContext;
+use crate::pointer::BorrowedPointer;
 
 struct WatchData {
     update_fn: RefCell<Box<dyn Fn()>>,
@@ -27,18 +25,21 @@ impl Watch {
     ) -> Self
     where
         T: ?Sized + 'static,
-        F: Fn(&mut T) + 'static
+        F: Fn(&mut T) + 'static,
     {
         let this = Watch(Rc::new(WatchData {
             update_fn: RefCell::new(Box::new(|| ())),
             cycle: Cell::new(0),
             debug_name,
         }));
-        WatchContext::expect_current(|ctx| {
-            ctx.bind_watch(this.get_ref(), || {
-                func(key_arg);
-            });
-        }, "Watch::new() called outside of WatchContext");
+        WatchContext::expect_current(
+            |ctx| {
+                ctx.bind_watch(this.get_ref(), || {
+                    func(key_arg);
+                });
+            },
+            "Watch::new() called outside of WatchContext",
+        );
         let func_cell = Cell::new(Some(func));
         *this.0.update_fn.borrow_mut() = Box::new(move || {
             let func = func_cell.take().unwrap();
@@ -77,11 +78,12 @@ impl WatchRef {
                 let mut new = self;
                 new.cycle += 1;
                 watch.cycle.set(new.cycle);
-                WatchContext::expect_current(|ctx| {
-                    ctx.bind_watch(new, || {
-                        (watch.update_fn.borrow())()
-                    });
-                }, "WatchRef.trigger() called outside of WatchContext");
+                WatchContext::expect_current(
+                    |ctx| {
+                        ctx.bind_watch(new, || (watch.update_fn.borrow())());
+                    },
+                    "WatchRef.trigger() called outside of WatchContext",
+                );
             }
         }
     }
@@ -89,7 +91,7 @@ impl WatchRef {
 
 #[derive(Default)]
 struct WatchSetNode {
-    data: [Option<WatchRef>; 4],  // TODO: analyse better len here?
+    data: [Option<WatchRef>; 4], // TODO: analyse better len here?
     next: Option<Box<WatchSetNode>>,
 }
 
@@ -99,7 +101,9 @@ pub struct WatchSet {
 
 impl WatchSet {
     pub fn new() -> Self {
-        WatchSet { list: Cell::new(None) }
+        WatchSet {
+            list: Cell::new(None),
+        }
     }
 
     fn with<F, R>(&self, func: F) -> R
@@ -117,19 +121,17 @@ impl WatchSet {
     }
 
     pub fn add(&self, watch: WatchRef) {
-        self.with(|list| {
-            loop {
-                let node = list.get_or_insert_with(Box::default);
-                for bucket in node.data.iter_mut() {
-                    if bucket.is_none() {
-                        *bucket = Some(watch);
-                        return;
-                    }
+        self.with(|list| loop {
+            let node = list.get_or_insert_with(Box::default);
+            for bucket in node.data.iter_mut() {
+                if bucket.is_none() {
+                    *bucket = Some(watch);
+                    return;
                 }
-                let mut new = Box::new(WatchSetNode::default());
-                new.next = list.take();
-                *list = Some(new);
             }
+            let mut new = Box::new(WatchSetNode::default());
+            new.next = list.take();
+            *list = Some(new);
         });
     }
 

@@ -1,12 +1,9 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
-  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::pointer::{
-    OwnedPointer,
-    BorrowedPointer,
-};
 use super::Watch;
+use crate::pointer::{BorrowedPointer, OwnedPointer};
 
 struct WatcherMetaBase<T: ?Sized> {
     data: BorrowedPointer<T>,
@@ -22,7 +19,7 @@ pub struct WatcherMeta<'a, T: ?Sized> {
     key_data: &'a mut T,
 }
 
-impl <T: 'static> WatcherMeta<'_, T> {
+impl<T: 'static> WatcherMeta<'_, T> {
     /// Get a value representing a unique id for the watcher this
     /// WatcherMeta was created for. This value may outlive the watcher, and
     /// will never compare equal to a value returned by the id method of a
@@ -38,7 +35,8 @@ impl<T: ?Sized + 'static> WatcherMeta<'_, T> {
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
     pub fn watch<F>(&mut self, func: F)
-        where F: Fn(&mut T) + 'static
+    where
+        F: Fn(&mut T) + 'static,
     {
         let data = self.base.data.clone();
         let watch = Watch::new(self.key_data, data, func, self.debug_name);
@@ -88,10 +86,7 @@ impl<T: WatcherInit> Watcher<T> {
             WatcherInit::init(&mut meta);
             meta.base
         };
-        Watcher {
-            data,
-            _meta: meta,
-        }
+        Watcher { data, _meta: meta }
     }
 
     /// Consume the Watcher and return the data stored inside. Watch callbacks
@@ -177,7 +172,7 @@ impl std::fmt::Debug for WatcherId {
 impl<T: serde::Serialize> serde::Serialize for Watcher<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
         T::serialize(self.data.as_ref(), serializer)
     }
@@ -186,11 +181,11 @@ impl<T: serde::Serialize> serde::Serialize for Watcher<T> {
 #[cfg(feature = "serde")]
 impl<'de, T> serde::Deserialize<'de> for Watcher<T>
 where
-    T: WatcherInit + serde::Deserialize<'de>
+    T: WatcherInit + serde::Deserialize<'de>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         T::deserialize(deserializer).map(Self::create)
     }
