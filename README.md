@@ -1,3 +1,8 @@
+[![crates.io](https://img.shields.io/crates/v/drying_paint.svg)](https://crates.io/crates/drying_paint)
+[![docs.rs](https://docs.rs/drying_paint/badge.svg)](https://docs.rs/drying_paint/)
+[![Build Status](https://github.com/geeklint/drying_paint/workflows/Rust/badge.svg)](https://github.com/geeklint/drying_paint/actions)
+![MPL-2.0 License](https://img.shields.io/crates/l/drying_paint?color=blueviolet)
+
 The name 'drying_paint' comes from the expression "watching paint dry".
 This module provides a system to "watch" some values for changes and run
 code whenever they change.
