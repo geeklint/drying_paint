@@ -6,6 +6,8 @@ use std::sync::{atomic, mpsc, Arc};
 
 use super::{WatchContext, WatchedMeta};
 
+type NotSend = std::marker::PhantomData<std::rc::Rc<()>>;
+
 #[derive(Default)]
 pub(crate) struct ChannelsContext {
     activity: WatchedMeta,
@@ -16,6 +18,71 @@ impl ChannelsContext {
     pub(crate) fn check_for_activity(&self) {
         if self.flag.swap(false, atomic::Ordering::AcqRel) {
             self.activity.trigger();
+        }
+    }
+}
+
+/// AtomicWatchedMeta is like WatchedMeta, however allows you to create
+/// a trigger which may be sent to other threads.
+///
+/// When this trigger is invoked, watch functions in the single-threaded watch
+/// context will be re-run.
+#[derive(Debug, Default)]
+pub struct AtomicWatchedMeta {
+    _notsend: NotSend,
+}
+
+impl AtomicWatchedMeta {
+    /// Create a new AtomicWatchedMeta
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// When run in a function designed to watch a value, will bind so that
+    /// function will be re-run when a trigger associated with this
+    /// AtomicWatchedMeta is invoked.
+    pub fn watched(&self) {
+        WatchContext::try_get_current(|ctx| {
+            ctx.channels_context().activity.watched();
+        });
+    }
+
+    /// Create a trigger for this AtomicWatchedMeta which may be sent to
+    /// another thread.
+    pub fn create_trigger(&self) -> AtomicWatchedMetaTrigger {
+        let flag = WatchContext::expect_current(
+            |ctx| Arc::clone(&ctx.channels_context().flag),
+            "AtomicWatchedMeta::create_trigger called outside WatchContext",
+        );
+        AtomicWatchedMetaTrigger { flag }
+    }
+}
+
+/// A type which can be used from another thread to trigger watch functions
+/// watching an AtomicWatchedMeta.
+#[derive(Debug, Clone)]
+pub struct AtomicWatchedMetaTrigger {
+    flag: Arc<atomic::AtomicBool>,
+}
+
+impl AtomicWatchedMetaTrigger {
+    /// Invoke this trigger.
+    pub fn trigger(&self) {
+        self.flag.store(true, atomic::Ordering::Release);
+    }
+
+    /// Create an AtomicWatchedMetaTrigger which is not assocaited with any
+    /// AtomicWatchedMeta.  Invoking the trigger returned from this function
+    /// will do nothing.  This may be useful e.g. as a placeholder value.
+    ///
+    /// ```rust
+    /// use drying_paint::AtomicWatchedMetaTrigger;
+    /// let foo = AtomicWatchedMetaTrigger::new_inert();
+    /// foo.trigger();
+    /// ```
+    pub fn new_inert() -> Self {
+        Self {
+            flag: Arc::default(),
         }
     }
 }
@@ -96,19 +163,16 @@ impl ChannelsContext {
 /// }
 /// ```
 pub fn watched_channel<T>() -> (WatchedSender<T>, WatchedReceiver<T>) {
-    let flag = WatchContext::expect_current(
-        |ctx| Arc::clone(&ctx.channels_context().flag),
-        "watched_channel called outside WatchContext",
-    );
+    let meta = AtomicWatchedMeta::new();
     let (sender, receiver) = mpsc::channel::<T>();
     (
         WatchedSender {
             inner: sender,
-            flag,
+            trigger: meta.create_trigger(),
         },
         WatchedReceiver {
             inner: receiver,
-            _notsend: std::marker::PhantomData,
+            meta,
         },
     )
 }
@@ -117,7 +181,7 @@ pub fn watched_channel<T>() -> (WatchedSender<T>, WatchedReceiver<T>) {
 #[derive(Clone, Debug)]
 pub struct WatchedSender<T> {
     inner: mpsc::Sender<T>,
-    flag: Arc<atomic::AtomicBool>,
+    trigger: AtomicWatchedMetaTrigger,
 }
 
 impl<T> WatchedSender<T> {
@@ -130,7 +194,7 @@ impl<T> WatchedSender<T> {
     pub fn send(&self, t: T) -> Result<(), mpsc::SendError<T>> {
         let ret = self.inner.send(t);
         if ret.is_ok() {
-            self.flag.store(true, atomic::Ordering::Release);
+            self.trigger.trigger();
         }
         ret
     }
@@ -138,7 +202,7 @@ impl<T> WatchedSender<T> {
 
 impl<T> Drop for WatchedSender<T> {
     fn drop(&mut self) {
-        self.flag.store(true, atomic::Ordering::Release);
+        self.trigger.trigger();
     }
 }
 
@@ -152,7 +216,7 @@ impl<T> Drop for WatchedSender<T> {
 #[derive(Debug)]
 pub struct WatchedReceiver<T> {
     inner: mpsc::Receiver<T>,
-    _notsend: std::marker::PhantomData<std::rc::Rc<()>>,
+    meta: AtomicWatchedMeta,
 }
 
 impl<T> WatchedReceiver<T> {
@@ -162,9 +226,7 @@ impl<T> WatchedReceiver<T> {
     /// additionally binds enclosing watch closures, so that they will be
     /// re-run when new data might be available.
     pub fn recv(&self) -> Result<T, mpsc::TryRecvError> {
-        WatchContext::try_get_current(|ctx| {
-            ctx.channels_context().activity.watched();
-        });
+        self.meta.watched();
         self.inner.try_recv()
     }
 
@@ -174,9 +236,7 @@ impl<T> WatchedReceiver<T> {
     /// additionally binds enclosing watch closures, so that they will be
     /// re-run when new data might be available.
     pub fn iter(&self) -> mpsc::TryIter<T> {
-        WatchContext::try_get_current(|ctx| {
-            ctx.channels_context().activity.watched();
-        });
+        self.meta.watched();
         self.inner.try_iter()
     }
 }

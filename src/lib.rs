@@ -165,7 +165,10 @@ mod event;
 pub use event::WatchedEvent;
 
 mod channels;
-pub use channels::{watched_channel, WatchedReceiver, WatchedSender};
+pub use channels::{
+    watched_channel, AtomicWatchedMeta, AtomicWatchedMetaTrigger,
+    WatchedReceiver, WatchedSender,
+};
 
 #[cfg(test)]
 mod tests {
