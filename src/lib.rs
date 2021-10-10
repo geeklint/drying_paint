@@ -143,23 +143,28 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 #![allow(clippy::needless_doctest_main)]
 
 mod trigger;
+pub use trigger::WatchArg;
 use trigger::{Watch, WatchRef, WatchSet};
 
 mod context;
 pub use context::WatchContext;
 
-mod watched;
-pub use watched::{Watched, WatchedCell, WatchedMeta};
+mod watched_core;
+pub use watched_core::{WatchedCellCore, WatchedCore, WatchedMeta};
 
-mod pointer;
+/*
+mod watched;
+pub use watched::{Watched, WatchedCell};
+*/
 
 mod watcher;
-pub use watcher::{Watcher, WatcherId, WatcherInit, WatcherMeta};
+pub use watcher::{WatcherContent, WatcherInit};
 
+/*
 mod event;
 pub use event::WatchedEvent;
 
@@ -168,6 +173,7 @@ pub use channels::{
     watched_channel, AtomicWatchedMeta, AtomicWatchedMetaTrigger,
     WatchedReceiver, WatchedSender,
 };
+*/
 
 #[cfg(test)]
 mod tests {

@@ -1,43 +1,13 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
-use super::channels::ChannelsContext;
-use super::{WatchRef, WatchSet};
+use super::WatchSet;
 
-thread_local! {
-    static CTX_STACK: RefCell<Vec<WatchContext>> = RefCell::new(Vec::new());
-}
-
-/// Most of the functions in this crate require that they are executing in
-/// a context.  The context keeps track of some "global" state which enables
-/// the functionality in this crate.
-///
-/// The following will panic if done outside of a WatchContext:
-///   * Calling WatchContext::update_current() (you can use
-/// WatchContext::update() to concisely update a context from outside itself).
-///   * Mutating a [Watched](struct.Watched.html) value.
-///   * Calling
-/// [WatchedEvent::dispatch()](struct.WatchedEvent.html#method.dispatch)
-///   * Calling
-/// [WatchedMeta::trigger()](struct.WatchedMeta.html#method.trigger) (the two
-/// above are actually just specific variations on this)
-///   * Creating a [Watcher](struct.Watcher.html)
-///
-/// When a watched value changes, the code watching those values will be
-/// queued onto the WatchContext. WatchContext::update_current() will execute
-/// all pending operations.
-/// Note: Because Watcher makes use of a RefCell internally to execute the
-/// watching code, you should not keep references gotten from Watcher::data()
-/// or Watcher::data_mut() around during WatchContext::update_current()
-/// or WatchContext::update().
-pub struct WatchContext {
-    front_frame: WatchSet,
-    back_frame: WatchSet,
-    watching_stack: RefCell<Vec<WatchRef>>,
+pub struct WatchContext<C: private_ctx::Ctx = Ctx<'static>> {
+    next_frame: Rc<C::WatchSet>,
     frame_limit: Option<usize>,
-    chan_ctx: ChannelsContext,
 }
 
 impl WatchContext {
@@ -49,48 +19,39 @@ impl WatchContext {
             None
         };
         WatchContext {
-            front_frame: WatchSet::new(),
-            back_frame: WatchSet::new(),
-            watching_stack: RefCell::new(Vec::new()),
+            next_frame: Rc::default(),
             frame_limit,
-            chan_ctx: ChannelsContext::default(),
         }
     }
 
-    /// Set this WatchContext as the current one for the duration of the
-    /// passed function. Note that it is supported (although discouraged) to
-    /// nest WatchContexts within each other.
-    pub fn with<R, F: FnOnce() -> R>(self, func: F) -> (Self, R) {
-        CTX_STACK.with(|stack| {
-            stack.borrow_mut().push(self);
-            let res = (func)();
-            (stack.borrow_mut().pop().unwrap(), res)
-        })
-    }
-
-    /// Execute all operations which are currently pending because a value
-    /// they were watching changed.
-    /// Note: Because Watcher makes use of a RefCell internally to execute
-    /// the watching code, you should not keep references gotten from
-    /// Watcher::data() or Watcher::data_mut() around during
-    /// WatchContext::update_current() or WatchContext::update().
-    ///
-    /// # Panics
-    /// This function will panic if called outside of WatchContext::with, or
-    /// if any function queued for update panics or if the limit set by
-    /// set_frame_limit is exceeded.
-    pub fn update_current() {
-        Self::expect_current(
-            |ctx| {
-                ctx.internal_update();
-            },
-            "WatchContext::update_current() called outside of WatchContext",
-        );
-    }
-
-    /// The same as doing `context.with(|| WatchContext::update_current())`
-    pub fn update(self) -> Self {
-        self.with(Self::update_current).0
+    pub fn update(&mut self) {
+        //self.chan_ctx.check_for_activity();
+        let weak_next = Rc::downgrade(&self.next_frame);
+        if let Some(mut frame_limit) = self.frame_limit {
+            while !self.next_frame.empty() {
+                if frame_limit == 0 {
+                    let current_watch_names = "TODO";
+                    //self.back_frame.debug_names();
+                    panic!(
+                        "Updating a WatchContext exceeded it's \
+                        limit for iteration.  This usually means there is a \
+                        recursive watch.  You may be interested in \
+                        Watched::set_if_neq to resolve recursive watches.  \
+                        If the number of iterations was intentional, you \
+                        can try increasing the limit with \
+                        WatchContext::set_frame_limit.  The following types \
+                        might be involved in the recursive watch:\n  {}",
+                        current_watch_names,
+                    );
+                }
+                self.next_frame.execute(&weak_next);
+                frame_limit -= 1;
+            }
+        } else {
+            while !self.next_frame.empty() {
+                self.next_frame.execute(&weak_next);
+            }
+        }
     }
 
     /// Set the number of cycles this watch context will execute before
@@ -134,96 +95,31 @@ impl WatchContext {
         self.frame_limit = value;
     }
 
-    /// In order to ensure the data stored in Watchers is not mutably aliased
-    /// during watch callbacks, Watcher::data() and Watcher::data_mut() will
-    /// panic if called outside this function or a watch callback.
-    pub fn allow_watcher_access<F, U, R>(data: U, func: F) -> R
-    where
-        F: 'static + FnOnce(U) -> R,
-        U: 'static,
-        R: 'static,
-    {
-        crate::pointer::BorrowedPointer::allow_refs(data, func)
-    }
-
-    pub(crate) fn expect_current<F, R>(func: F, msg: &str) -> R
-    where
-        F: FnOnce(&WatchContext) -> R,
-    {
-        CTX_STACK.with(|stack| {
-            let borrow = stack.borrow();
-            (func)(borrow.last().expect(msg))
-        })
-    }
-
-    pub(crate) fn try_get_current<F: FnOnce(&WatchContext)>(func: F) {
-        CTX_STACK.with(|stack| {
-            let borrow = stack.borrow();
-            if let Some(ptr) = borrow.last() {
-                (func)(ptr);
-            }
-        });
-    }
-
+    /*
     pub(crate) fn channels_context(&self) -> &ChannelsContext {
         &self.chan_ctx
     }
-
-    fn internal_update(&self) {
-        self.chan_ctx.check_for_activity();
-        if let Some(mut frame_limit) = self.frame_limit {
-            while !self.back_frame.empty() {
-                if frame_limit == 0 {
-                    let current_watch_names = self.back_frame.debug_names();
-                    panic!(
-                        "Updating a WatchContext exceeded it's \
-                        limit for iteration.  This usually means there is a \
-                        recursive watch.  You may be interested in \
-                        Watched::set_if_neq to resolve recursive watches.  \
-                        If the number of iterations was intentional, you \
-                        can try increasing the limit with \
-                        WatchContext::set_frame_limit.  The following types \
-                        might be involved in the recursive watch:\n  {}",
-                        current_watch_names,
-                    );
-                }
-                self.front_frame.swap(&self.back_frame);
-                self.front_frame.trigger();
-                frame_limit -= 1;
-            }
-        } else {
-            while !self.back_frame.empty() {
-                self.front_frame.swap(&self.back_frame);
-                self.front_frame.trigger();
-            }
-        }
-    }
-
-    pub(crate) fn bind_watch<F: FnOnce()>(&self, watch: WatchRef, func: F) {
-        self.watching_stack.borrow_mut().push(watch);
-        (func)();
-        self.watching_stack.borrow_mut().pop();
-    }
-
-    pub(crate) fn current_watch(&self) -> Option<WatchRef> {
-        Some(self.watching_stack.borrow().last()?.clone())
-    }
-
-    pub(crate) fn add_to_next(&self, set: &WatchSet) {
-        match self.watching_stack.borrow().last() {
-            Some(watch) => {
-                self.back_frame
-                    .add_all(set, |to_add| !to_add.watch_eq(watch));
-            }
-            None => {
-                self.back_frame.add_all(set, |_| true);
-            }
-        };
-    }
+    */
 }
 
 impl Default for WatchContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+struct Invariant<T>(fn(T) -> T);
+
+pub struct Ctx<'ctx> {
+    _marker: core::marker::PhantomData<Invariant<&'ctx ()>>,
+}
+
+pub(crate) mod private_ctx {
+    pub trait Ctx {
+        type WatchSet;
+    }
+
+    impl<'ctx> Ctx for super::Ctx<'ctx> {
+        type WatchSet = crate::WatchSet<'ctx>;
     }
 }

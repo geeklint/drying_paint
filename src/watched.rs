@@ -1,78 +1,36 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use std::cell::Cell;
-use std::ops::{Deref, DerefMut};
+use core::fmt;
+use core::ops::{Deref, DerefMut};
 
-use super::{WatchContext, WatchSet};
-
-/// This provides the basic functionality behind watched values. You can use
-/// it to provide functionality using the watch system for cases where
-/// [Watched](struct.Watched.html) and
-/// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
-#[derive(Default)]
-pub struct WatchedMeta {
-    watchers: WatchSet,
-}
-
-impl WatchedMeta {
-    /// Create a new WatchedMeta instance
-    pub fn new() -> Self {
-        WatchedMeta {
-            watchers: WatchSet::new(),
-        }
-    }
-
-    /// When run in a function designed to watch a value, will bind so that
-    /// function will be re-run when this is triggered.
-    pub fn watched(&self) {
-        WatchContext::try_get_current(|ctx| {
-            if let Some(watch) = ctx.current_watch() {
-                self.watchers.add(watch);
-            }
-        });
-    }
-
-    /// Mark this value as having changed, so that watching functions will
-    /// be marked as needing to be updated.
-    /// # Panics
-    /// This function will panic if called outside of WatchContext::with
-    pub fn trigger(&self) {
-        WatchContext::expect_current(
-            |ctx| {
-                ctx.add_to_next(&self.watchers);
-            },
-            "WatchedMeta.trigger() called outside of WatchContext",
-        );
-    }
-}
+use crate::{context::Ctx, WatchedCellCore, WatchedCore};
 
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
 /// changes.
+#[derive(Clone, Default)]
 pub struct Watched<T: ?Sized> {
-    meta: WatchedMeta,
-    value: T,
+    inner: WatchedCore<T, Ctx<'static>>,
 }
 
 impl<T> Watched<T> {
     /// Create a new watched value.
     pub fn new(value: T) -> Self {
         Watched {
-            value,
-            meta: WatchedMeta::new(),
+            inner: WatchedCore::new(value),
         }
     }
 
     /// Consumes the `Watched`, returning the wrapped value
-    pub fn into_inner(self) -> T {
-        self.value
+    pub fn into_inner(this: Self) -> T {
+        this.inner.into_inner()
     }
 
     /// Replaces the wrapped value with a new one, returning the old value,
     /// without deinitializing either one.
-    pub fn replace(&mut self, value: T) -> T {
-        std::mem::replace(&mut *self, value)
+    pub fn replace(this: &mut Self, value: T) -> T {
+        std::mem::replace(&mut *this, value)
     }
 }
 
@@ -80,14 +38,14 @@ impl<T: ?Sized> Watched<T> {
     /// Get a referenced to the wrapped value, without binding the current
     /// watch closure.
     pub fn get_unwatched(this: &Self) -> &T {
-        &this.value
+        &this.get_unwatched()
     }
 }
 
 impl<T: Default> Watched<T> {
     /// Takes the wrapped value, leaving `Default::default()` in its place.
-    pub fn take(&mut self) -> T {
-        std::mem::take(&mut *self)
+    pub fn take(this: &mut Self) -> T {
+        std::mem::take(&mut *this)
     }
 }
 
@@ -146,45 +104,19 @@ impl<T: ?Sized> Deref for Watched<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        self.meta.watched();
-        &self.value
+        self.inner.get_auto()
     }
 }
 
 impl<T: ?Sized> DerefMut for Watched<T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.meta.trigger();
-        self.meta.watched();
-        &mut self.value
+        self.inner.get_mut_auto()
     }
 }
-
-impl<T: Default> Default for Watched<T> {
-    fn default() -> Self {
-        Watched::new(Default::default())
-    }
-}
-
-use std::fmt;
 
 impl<T: fmt::Debug + ?Sized> fmt::Debug for Watched<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&**self, f)
-    }
-}
-
-impl<T: fmt::Display + ?Sized> fmt::Display for Watched<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&**self, f)
-    }
-}
-
-impl<T: Clone> Clone for Watched<T> {
-    fn clone(&self) -> Watched<T> {
-        Watched {
-            value: Clone::clone(&self.value),
-            meta: WatchedMeta::new(),
-        }
+        fmt::Debug::fmt(self.inner.get_auto(), f)
     }
 }
 
@@ -223,8 +155,7 @@ mod watched_ops {
                 type Output = <T as $imp>::Output;
 
                 fn $method(self) -> <T as $imp>::Output {
-                    self.meta.watched();
-                    $imp::$method(self.value)
+                    $imp::$method(self.inner.get_auto())
                 }
             }
 
@@ -235,8 +166,7 @@ mod watched_ops {
                 type Output = <&'a T as $imp>::Output;
 
                 fn $method(self) -> <&'a T as $imp>::Output {
-                    self.meta.watched();
-                    $imp::$method(&self.value)
+                    $imp::$method(&self.inner.get_auto())
                 }
             }
         };
@@ -251,8 +181,7 @@ mod watched_ops {
                 type Output = <T as $imp<U>>::Output;
 
                 fn $method(self, other: U) -> <T as $imp<U>>::Output {
-                    self.meta.watched();
-                    $imp::$method(self.value, other)
+                    $imp::$method(self.inner.get_auto(), other)
                 }
             }
 
@@ -264,8 +193,7 @@ mod watched_ops {
                 type Output = <&'a T as $imp<U>>::Output;
 
                 fn $method(self, other: U) -> <&'a T as $imp<U>>::Output {
-                    self.meta.watched();
-                    $imp::$method(&self.value, other)
+                    $imp::$method(self.inner.get_auto(), other)
                 }
             }
         };
@@ -278,10 +206,9 @@ mod watched_ops {
                 T: $imp<U> + ?Sized,
             {
                 fn $method(&mut self, rhs: U) {
-                    let res = $imp::$method(&mut self.value, rhs);
+                    $imp::$method(self.inner.get_mut_auto(), rhs);
                     self.meta.trigger();
                     self.meta.watched();
-                    res
                 }
             }
         };
@@ -318,14 +245,12 @@ mod watched_ops {
         U: ?Sized,
     {
         fn eq(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialEq::eq(&self.value, other)
+            PartialEq::eq(self.inner.get_auto(), other)
         }
 
         #[allow(clippy::partialeq_ne_impl)]
         fn ne(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialEq::ne(&self.value, other)
+            PartialEq::ne(self.inner.get_auto(), other)
         }
     }
 
@@ -335,33 +260,26 @@ mod watched_ops {
         U: ?Sized,
     {
         fn partial_cmp(&self, other: &U) -> Option<Ordering> {
-            self.meta.watched();
-            PartialOrd::partial_cmp(&self.value, other)
+            PartialOrd::partial_cmp(self.inner.get_auto(), other)
         }
         fn lt(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialOrd::lt(&self.value, other)
+            PartialOrd::lt(self.inner.get_auto(), other)
         }
         fn le(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialOrd::le(&self.value, other)
+            PartialOrd::le(self.inner.get_auto(), other)
         }
         fn ge(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialOrd::ge(&self.value, other)
+            PartialOrd::ge(self.inner.get_auto(), other)
         }
         fn gt(&self, other: &U) -> bool {
-            self.meta.watched();
-            PartialOrd::gt(&self.value, other)
+            PartialOrd::gt(self.inner.get_auto(), other)
         }
     }
 
     /*
     impl<T: Ord> Ord for Watched<T> {
         fn cmp(&self, other: &Watched<T>) -> Ordering {
-            self.meta.watched();
-            other.meta.watched();
-            Ord::cmp(&self.value, &other.value)
+            Ord::cmp(self.inner.get_auto(), other.inner.get_auto())
         }
     }
 
@@ -375,8 +293,7 @@ mod watched_ops {
 /// `RefCell<Watched<T>>`.
 #[derive(Default)]
 pub struct WatchedCell<T: ?Sized> {
-    meta: WatchedMeta,
-    value: Cell<T>,
+    inner: WatchedCellCore<T, Ctx<'static>>,
 }
 
 impl<T: ?Sized> WatchedCell<T> {
@@ -385,14 +302,12 @@ impl<T: ?Sized> WatchedCell<T> {
     /// This call borrows the WatchedCell mutably (at compile-time) which
     /// guarantees that we possess the only reference.
     pub fn get_mut(&mut self) -> &mut T {
-        self.meta.trigger();
-        self.meta.watched();
-        self.value.get_mut()
+        self.inner.get_mut_auto()
     }
 
     /// Treat this WatchedCell as watched, without fetching the actual value.
     pub fn watched(&self) {
-        self.meta.watched();
+        self.inner.watched_auto();
     }
 }
 
@@ -400,50 +315,43 @@ impl<T> WatchedCell<T> {
     /// Create a new WatchedCell
     pub fn new(value: T) -> Self {
         Self {
-            meta: WatchedMeta::new(),
-            value: Cell::new(value),
+            inner: WatchedCellCore::new(value),
         }
     }
 
     /// Sets the watched value
     pub fn set(&self, value: T) {
-        self.replace(value);
+        self.inner.set_auto(value);
     }
 
     /// Unwraps the WatchedCell, returning the contained value
     pub fn into_inner(self) -> T {
-        self.value.into_inner()
+        self.inner.into_inner()
     }
 
     /// Replaces the contained value and returns the previous value
     pub fn replace(&self, value: T) -> T {
-        self.meta.trigger();
-        self.meta.watched();
-        self.value.replace(value)
+        self.inner.replace_auto(value)
     }
 }
 
 impl<T: Copy> WatchedCell<T> {
     /// Returns a copy of the watched value
     pub fn get(&self) -> T {
-        self.meta.watched();
-        self.value.get()
+        self.inner.get_auto()
     }
 }
 
 impl<T: Default> WatchedCell<T> {
     /// Takes the watched value, leaving `Default::default()` in its place
     pub fn take(&self) -> T {
-        self.meta.trigger();
-        self.meta.watched();
-        self.value.take()
+        self.value.take_auto()
     }
 }
 
 impl<T: Copy> Clone for WatchedCell<T> {
     fn clone(&self) -> Self {
-        self.meta.watched();
-        Self::new(self.value.get())
+        Self::new(self.get())
     }
 }
 
