@@ -3,14 +3,14 @@
 
 use std::rc::{Rc, Weak};
 
-use super::WatchSet;
+use crate::{WatchSet, WatcherOwner};
 
-pub struct WatchContext<C: private_ctx::Ctx = Ctx<'static>> {
-    next_frame: Rc<C::WatchSet>,
+pub struct WatchContext<O: ?Sized> {
+    next_frame: Rc<WatchSet<O>>,
     frame_limit: Option<usize>,
 }
 
-impl WatchContext {
+impl<O: ?Sized> WatchContext<O> {
     /// Create a new WatchContext
     pub fn new() -> Self {
         let frame_limit = if cfg!(debug_assertions) {
@@ -44,12 +44,12 @@ impl WatchContext {
                         current_watch_names,
                     );
                 }
-                self.next_frame.execute(&weak_next);
+                self.next_frame.execute(todo!(), &weak_next);
                 frame_limit -= 1;
             }
         } else {
             while !self.next_frame.empty() {
-                self.next_frame.execute(&weak_next);
+                self.next_frame.execute(todo!(), &weak_next);
             }
         }
     }
@@ -102,24 +102,8 @@ impl WatchContext {
     */
 }
 
-impl Default for WatchContext {
+impl<O: ?Sized> Default for WatchContext<O> {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-struct Invariant<T>(fn(T) -> T);
-
-pub struct Ctx<'ctx> {
-    _marker: core::marker::PhantomData<Invariant<&'ctx ()>>,
-}
-
-pub(crate) mod private_ctx {
-    pub trait Ctx {
-        type WatchSet;
-    }
-
-    impl<'ctx> Ctx for super::Ctx<'ctx> {
-        type WatchSet = crate::WatchSet<'ctx>;
     }
 }

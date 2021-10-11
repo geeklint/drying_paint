@@ -4,25 +4,36 @@
 use core::{cell::Cell, mem};
 use std::rc::{Rc, Weak};
 
+use crate::WatcherOwner;
+
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
     update_fn: F,
     //debug_name: &'static str,
 }
 
-#[derive(Clone, Copy)]
-pub struct WatchArg<'a, 'ctx> {
-    pub(crate) watch: &'a Watch<'ctx>,
-    pub(crate) post_set: &'a Weak<WatchSet<'ctx>>,
+pub struct WatchArg<'a, O: ?Sized> {
+    pub(crate) watch: &'a Watch<O>,
+    pub(crate) post_set: &'a Weak<WatchSet<O>>,
 }
 
-struct OwnedWatchArg(Watch<'static>, Weak<WatchSet<'static>>);
+impl<'a, O: ?Sized> Copy for WatchArg<'a, O> {}
+impl<'a, O: ?Sized> Clone for WatchArg<'a, O> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+struct OwnedWatchArg(
+    Watch<dyn WatcherOwner>,
+    Weak<WatchSet<dyn WatcherOwner>>,
+);
 
 thread_local! {
     static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = Cell::new(None);
 }
 
-impl<'a> WatchArg<'a, 'static> {
+impl<'a> WatchArg<'a, dyn WatcherOwner> {
     pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
         CURRENT_ARG.with(|cell| {
             let to_set =
@@ -34,7 +45,7 @@ impl<'a> WatchArg<'a, 'static> {
         })
     }
 
-    pub fn try_with_current<F: FnOnce(WatchArg<'_, 'static>)>(
+    pub fn try_with_current<F: FnOnce(WatchArg<'_, dyn WatcherOwner>)>(
         f: F,
     ) -> Option<()> {
         CURRENT_ARG.with(|cell| {
@@ -50,24 +61,29 @@ impl<'a> WatchArg<'a, 'static> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct Watch<'ctx>(
-    Rc<WatchData<dyn 'ctx + Fn(WatchArg<'_, 'ctx>)>>,
+pub(crate) struct Watch<O: ?Sized>(
+    Rc<WatchData<dyn Fn(&mut O, WatchArg<'_, O>)>>,
 );
 
-impl<'ctx> Watch<'ctx> {
-    pub fn new<F>(func: F, post_set: &Weak<WatchSet<'ctx>>)
+impl<O: ?Sized> Clone for Watch<O> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<O: ?Sized> Watch<O> {
+    pub fn new<F>(owner: &mut O, post_set: &Weak<WatchSet<O>>, func: F)
     where
-        F: 'ctx + Fn(WatchArg<'_, 'ctx>),
+        F: 'static + Fn(&mut O, WatchArg<'_, O>),
     {
         let this = Watch(Rc::new(WatchData {
             update_fn: func,
             cycle: Cell::new(0),
         }));
-        this.get_ref().execute(post_set);
+        this.get_ref().execute(owner, post_set);
     }
 
-    pub fn get_ref(&self) -> WatchRef<'ctx> {
+    pub fn get_ref(&self) -> WatchRef<O> {
         WatchRef {
             watch: self.clone(),
             cycle: self.0.cycle.get(),
@@ -77,50 +93,74 @@ impl<'ctx> Watch<'ctx> {
 }
 
 #[derive(Clone)]
-pub(crate) struct WatchRef<'ctx> {
-    watch: Watch<'ctx>,
+pub(crate) struct WatchRef<O: ?Sized> {
+    watch: Watch<O>,
     cycle: usize,
     //debug_name: &'static str,
 }
 
-impl<'ctx> WatchRef<'ctx> {
+impl<O: ?Sized> WatchRef<O> {
     pub fn watch_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.watch.0, &other.watch.0)
     }
 
-    pub fn watch_eq_watch(&self, other: &Watch<'ctx>) -> bool {
+    pub fn watch_eq_watch(&self, other: &Watch<O>) -> bool {
         Rc::ptr_eq(&self.watch.0, &other.0)
     }
 
-    fn execute(self, post_set: &Weak<WatchSet<'ctx>>) {
+    fn execute(self, owner: &mut O, post_set: &Weak<WatchSet<O>>) {
         if self.cycle == self.watch.0.cycle.get() {
             self.watch.0.cycle.set(self.cycle + 1);
-            (self.watch.0.update_fn)(WatchArg {
-                watch: &self.watch,
-                post_set,
-            });
+            (self.watch.0.update_fn)(
+                owner,
+                WatchArg {
+                    watch: &self.watch,
+                    post_set,
+                },
+            );
         }
     }
 }
 
-#[derive(Default)]
-struct WatchSetNode<'ctx> {
-    data: [Option<WatchRef<'ctx>>; 4], // TODO: analyse better len here?
-    next: Option<Box<WatchSetNode<'ctx>>>,
+struct WatchSetNode<O: ?Sized> {
+    data: [Option<WatchRef<O>>; 4], // TODO: analyse better len here?
+    next: Option<Box<WatchSetNode<O>>>,
 }
 
-#[derive(Default)]
-struct WatchSetHead<'ctx> {
-    node: WatchSetNode<'ctx>,
-    target: Weak<WatchSet<'ctx>>,
+impl<O: ?Sized> Default for WatchSetNode<O> {
+    fn default() -> Self {
+        Self {
+            data: Default::default(),
+            next: None,
+        }
+    }
 }
 
-#[derive(Default)]
-pub struct WatchSet<'ctx> {
-    list: Cell<Option<Box<WatchSetHead<'ctx>>>>,
+struct WatchSetHead<O: ?Sized> {
+    node: WatchSetNode<O>,
+    target: Weak<WatchSet<O>>,
 }
 
-impl<'ctx> WatchSet<'ctx> {
+impl<O: ?Sized> Default for WatchSetHead<O> {
+    fn default() -> Self {
+        Self {
+            node: WatchSetNode::default(),
+            target: Weak::default(),
+        }
+    }
+}
+
+pub struct WatchSet<O: ?Sized> {
+    list: Cell<Option<Box<WatchSetHead<O>>>>,
+}
+
+impl<O: ?Sized> Default for WatchSet<O> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<O: ?Sized> WatchSet<O> {
     pub fn new() -> Self {
         WatchSet {
             list: Cell::new(None),
@@ -129,7 +169,7 @@ impl<'ctx> WatchSet<'ctx> {
 
     fn with<F, R>(&self, func: F) -> R
     where
-        F: FnOnce(&mut Option<Box<WatchSetHead<'ctx>>>) -> R,
+        F: FnOnce(&mut Option<Box<WatchSetHead<O>>>) -> R,
     {
         let mut list = self.list.replace(None);
         let ret = func(&mut list);
@@ -141,7 +181,7 @@ impl<'ctx> WatchSet<'ctx> {
         self.with(|list| list.is_none())
     }
 
-    pub(crate) fn add(&self, watch: WatchRef<'ctx>, target: &Weak<Self>) {
+    pub(crate) fn add(&self, watch: WatchRef<O>, target: &Weak<Self>) {
         self.with(|list| {
             let head = list.get_or_insert_with(|| {
                 Box::new(WatchSetHead {
@@ -160,9 +200,9 @@ impl<'ctx> WatchSet<'ctx> {
         });
     }
 
-    fn add_all<F>(&self, other: &WatchSet<'ctx>, mut filter: F)
+    fn add_all<F>(&self, other: &WatchSet<O>, mut filter: F)
     where
-        F: FnMut(&WatchRef<'ctx>) -> bool,
+        F: FnMut(&WatchRef<O>) -> bool,
     {
         if let Some(other_head) = other.list.take() {
             let target = &other_head.target;
@@ -184,7 +224,7 @@ impl<'ctx> WatchSet<'ctx> {
         }
     }
 
-    pub(crate) fn trigger_with_current(&self, current: &Watch<'ctx>) {
+    pub(crate) fn trigger_with_current(&self, current: &Watch<O>) {
         if let Some(target) = self
             .with(|list| list.as_mut().and_then(|head| head.target.upgrade()))
         {
@@ -200,7 +240,7 @@ impl<'ctx> WatchSet<'ctx> {
         }
     }
 
-    pub fn execute(&self, next_frame: &Weak<Self>) {
+    pub fn execute(&self, owner: &mut O, next_frame: &Weak<Self>) {
         let mut node = if let Some(head) = self.list.take() {
             head.node
         } else {
@@ -209,7 +249,7 @@ impl<'ctx> WatchSet<'ctx> {
         loop {
             for bucket in node.data.iter_mut() {
                 if let Some(watch) = bucket.take() {
-                    watch.execute(next_frame);
+                    watch.execute(owner, next_frame);
                 }
             }
             node = if let Some(next) = node.next {
@@ -235,7 +275,7 @@ impl<'ctx> WatchSet<'ctx> {
     }
     */
 
-    pub fn swap(&self, other: &WatchSet<'ctx>) {
+    pub fn swap(&self, other: &WatchSet<O>) {
         Cell::swap(&self.list, &other.list);
     }
 }

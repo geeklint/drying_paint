@@ -175,6 +175,8 @@ pub use channels::{
 };
 */
 
+pub trait WatcherOwner {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

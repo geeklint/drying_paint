@@ -3,17 +3,17 @@
 
 use std::rc::Weak;
 
-use crate::{Watch, WatchArg, WatchSet};
+use crate::{Watch, WatchArg, WatchSet, WatcherOwner};
 
-pub trait WatcherContent<'ctx> {
-    fn init(init: impl WatcherInit<'ctx, Self>);
+pub trait WatcherContent<O: ?Sized = dyn WatcherOwner> {
+    fn init(init: impl WatcherInit<Self, O>);
 }
 
-pub trait WatcherInit<'ctx, T: ?Sized> {
+pub trait WatcherInit<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut T) -> &mut Ch,
-        Ch: 'ctx + WatcherContent<'ctx>;
+        Ch: WatcherContent<O>;
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
@@ -25,7 +25,7 @@ pub trait WatcherInit<'ctx, T: ?Sized> {
     /// values referenced inside change.
     fn watch_explicit<F>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg, &mut T);
+        F: 'static + Fn(WatchArg<'_, O>, &mut T);
 
     /*
         /// Watches have a debug name used in some error messages.  It defaults to
@@ -37,10 +37,10 @@ pub trait WatcherInit<'ctx, T: ?Sized> {
     */
 }
 
-pub(crate) trait WatcherPath<Owner: ?Sized>: Clone {
+pub(crate) trait WatcherPath<O: ?Sized>: Clone {
     type Item: ?Sized;
 
-    fn get_mut<F>(&self, owner: &mut Owner, f: F)
+    fn get_mut<F>(&self, owner: &mut O, f: F)
     where
         F: FnOnce(&mut Self::Item);
 
@@ -75,22 +75,21 @@ where
     }
 }
 
-struct WatcherInitImpl<'a, 'ctx, Owner: ?Sized, Path> {
-    post_set: &'a Weak<WatchSet<'ctx>>,
+struct WatcherInitImpl<'a, Owner: ?Sized, Path> {
+    post_set: &'a Weak<WatchSet<Owner>>,
     owner: &'a mut Owner,
     path: Path,
 }
 
-impl<'a, 'ctx, Owner: ?Sized, Path, Content: ?Sized> WatcherInit<'ctx, Content>
-    for WatcherInitImpl<'a, 'ctx, Owner, Path>
+impl<'a, Owner: ?Sized, Path, Content: ?Sized> WatcherInit<Content, Owner>
+    for WatcherInitImpl<'a, Owner, Path>
 where
-    Path: 'ctx + WatcherPath<Owner, Item = Content>,
-    Content: 'ctx,
+    Path: 'static + WatcherPath<Owner, Item = Content>,
 {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut Content) -> &mut Ch,
-        Ch: 'ctx + WatcherContent<'ctx>,
+        Ch: WatcherContent<Owner>,
     {
         Ch::init(WatcherInitImpl {
             post_set: self.post_set,
@@ -108,16 +107,13 @@ where
 
     fn watch_explicit<F>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg, &mut Content),
+        F: 'static + Fn(WatchArg<'_, Owner>, &mut Content),
     {
         let current_path = self.path.clone();
-        Watch::new(
-            move |arg| {
-                current_path.get_mut(todo!(), |item| {
-                    func(arg, item);
-                });
-            },
-            self.post_set,
-        );
+        Watch::new(self.owner, self.post_set, move |owner, arg| {
+            current_path.get_mut(owner, |item| {
+                func(arg, item);
+            });
+        });
     }
 }
