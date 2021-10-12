@@ -143,7 +143,7 @@ where
         F: 'static + Fn(WatchArg<'_, Owner>, &mut Content),
     {
         let current_path = self.path.clone();
-        Watch::new(self.owner, self.post_set, move |owner, arg| {
+        Watch::spawn(self.owner, self.post_set, move |owner, arg| {
             current_path.get_mut(owner, |item| {
                 func(arg, item);
             });

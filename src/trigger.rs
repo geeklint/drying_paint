@@ -69,8 +69,11 @@ impl<O: ?Sized> Clone for Watch<O> {
 }
 
 impl<O: ?Sized> Watch<O> {
-    pub fn new<F>(owner: &mut O, post_set: &Weak<WatchSet<O>>, func: F)
-    where
+    pub(crate) fn spawn<F>(
+        owner: &mut O,
+        post_set: &Weak<WatchSet<O>>,
+        func: F,
+    ) where
         F: 'static + Fn(&mut O, WatchArg<'_, O>),
     {
         let this = Watch(Rc::new(WatchData {
@@ -80,7 +83,7 @@ impl<O: ?Sized> Watch<O> {
         this.get_ref().execute(owner, post_set);
     }
 
-    pub fn get_ref(&self) -> WatchRef<O> {
+    pub(crate) fn get_ref(&self) -> WatchRef<O> {
         WatchRef {
             watch: self.clone(),
             cycle: self.0.cycle.get(),
@@ -97,11 +100,7 @@ pub(crate) struct WatchRef<O: ?Sized> {
 }
 
 impl<O: ?Sized> WatchRef<O> {
-    pub fn watch_eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.watch.0, &other.watch.0)
-    }
-
-    pub fn watch_eq_watch(&self, other: &Watch<O>) -> bool {
+    pub fn watch_eq(&self, other: &Watch<O>) -> bool {
         Rc::ptr_eq(&self.watch.0, &other.0)
     }
 
@@ -225,7 +224,7 @@ impl<O: ?Sized> WatchSet<O> {
         if let Some(target) = self
             .with(|list| list.as_mut().and_then(|head| head.target.upgrade()))
         {
-            target.add_all(self, |to_add| !to_add.watch_eq_watch(current));
+            target.add_all(self, |to_add| !to_add.watch_eq(current));
         }
     }
 
@@ -271,8 +270,4 @@ impl<O: ?Sized> WatchSet<O> {
         })
     }
     */
-
-    pub fn swap(&self, other: &WatchSet<O>) {
-        Cell::swap(&self.list, &other.list);
-    }
 }
