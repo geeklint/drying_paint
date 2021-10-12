@@ -4,7 +4,7 @@
 use core::{cell::Cell, mem};
 use std::rc::{Rc, Weak};
 
-use crate::WatcherOwner;
+use crate::DefaultOwner;
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
@@ -24,16 +24,13 @@ impl<'a, O: ?Sized> Clone for WatchArg<'a, O> {
     }
 }
 
-struct OwnedWatchArg(
-    Watch<dyn WatcherOwner>,
-    Weak<WatchSet<dyn WatcherOwner>>,
-);
+struct OwnedWatchArg(Watch<DefaultOwner>, Weak<WatchSet<DefaultOwner>>);
 
 thread_local! {
     static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = Cell::new(None);
 }
 
-impl<'a> WatchArg<'a, dyn WatcherOwner> {
+impl<'a> WatchArg<'a, DefaultOwner> {
     pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
         CURRENT_ARG.with(|cell| {
             let to_set =
@@ -45,7 +42,7 @@ impl<'a> WatchArg<'a, dyn WatcherOwner> {
         })
     }
 
-    pub fn try_with_current<F: FnOnce(WatchArg<'_, dyn WatcherOwner>)>(
+    pub fn try_with_current<F: FnOnce(WatchArg<'_, DefaultOwner>)>(
         f: F,
     ) -> Option<()> {
         CURRENT_ARG.with(|cell| {
@@ -67,7 +64,7 @@ pub(crate) struct Watch<O: ?Sized>(
 
 impl<O: ?Sized> Clone for Watch<O> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self(Rc::clone(&self.0))
     }
 }
 

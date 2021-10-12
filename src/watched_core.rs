@@ -3,14 +3,14 @@
 
 use core::cell::Cell;
 
-use crate::{WatchArg, WatchContext, WatchSet, WatcherOwner};
+use crate::{DefaultOwner, WatchArg, WatchSet};
 
 /// This provides the basic functionality behind watched values. You can use
 /// it to provide functionality using the watch system for cases where
 /// [Watched](struct.Watched.html) and
 /// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
 #[derive(Default)]
-pub struct WatchedMeta<O: ?Sized = dyn WatcherOwner> {
+pub struct WatchedMeta<O: ?Sized = DefaultOwner> {
     watchers: WatchSet<O>,
 }
 
@@ -54,7 +54,7 @@ impl WatchedMeta {
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
 /// changes.
-pub struct WatchedCore<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
+pub struct WatchedCore<T: ?Sized, O: ?Sized = DefaultOwner> {
     meta: WatchedMeta<O>,
     value: T,
 }
@@ -115,7 +115,7 @@ impl<T: ?Sized, O: ?Sized> WatchedCore<T, O> {
     }
 }
 
-impl<T: ?Sized> WatchedCore<T, dyn WatcherOwner> {
+impl<T: ?Sized> WatchedCore<T, DefaultOwner> {
     pub fn get_auto(&self) -> &T {
         self.meta.watched_auto();
         &self.value
@@ -177,7 +177,7 @@ where
 /// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
 /// would not, and should be slightly more performant than
 /// `RefCell<Watched<T>>`.
-pub struct WatchedCellCore<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
+pub struct WatchedCellCore<T: ?Sized, O: ?Sized = DefaultOwner> {
     meta: WatchedMeta<O>,
     value: Cell<T>,
 }
@@ -211,7 +211,7 @@ impl<T: ?Sized, O: ?Sized> WatchedCellCore<T, O> {
     }
 }
 
-impl<T: ?Sized> WatchedCellCore<T, dyn WatcherOwner> {
+impl<T: ?Sized> WatchedCellCore<T, DefaultOwner> {
     pub fn get_mut_auto(&mut self) -> &mut T {
         self.meta.trigger_auto();
         self.meta.watched_auto();
@@ -251,7 +251,7 @@ impl<T, O: ?Sized> WatchedCellCore<T, O> {
     }
 }
 
-impl<T> WatchedCellCore<T, dyn WatcherOwner> {
+impl<T> WatchedCellCore<T, DefaultOwner> {
     pub fn set_auto(&self, value: T) {
         self.meta.trigger_auto();
         self.value.set(value);
@@ -276,7 +276,7 @@ impl<T: Copy, O: ?Sized> WatchedCellCore<T, O> {
     }
 }
 
-impl<T: Copy> WatchedCellCore<T, dyn WatcherOwner> {
+impl<T: Copy> WatchedCellCore<T, DefaultOwner> {
     pub fn get_auto(&self) -> T {
         self.meta.watched_auto();
         self.value.get()
@@ -292,7 +292,7 @@ impl<T: Default, O: ?Sized> WatchedCellCore<T, O> {
     }
 }
 
-impl<T: Default> WatchedCellCore<T, dyn WatcherOwner> {
+impl<T: Default> WatchedCellCore<T, DefaultOwner> {
     pub fn take_auto(&self) -> T {
         self.meta.trigger_auto();
         self.meta.watched_auto();

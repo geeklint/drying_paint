@@ -1,16 +1,21 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use std::rc::{Rc, Weak};
+use {
+    core::any::Any,
+    std::rc::{Rc, Weak},
+};
 
-use crate::{WatchSet, WatcherOwner};
+use crate::{WatchSet, WatcherHolder};
 
-pub struct WatchContext<O: ?Sized> {
+pub struct WatchContext<O = DefaultOwner> {
     next_frame: Rc<WatchSet<O>>,
+    next_frame_weak: Weak<WatchSet<O>>,
     frame_limit: Option<usize>,
+    owner: O,
 }
 
-impl<O: ?Sized> WatchContext<O> {
+impl<O: Default> WatchContext<O> {
     /// Create a new WatchContext
     pub fn new() -> Self {
         let frame_limit = if cfg!(debug_assertions) {
@@ -18,15 +23,35 @@ impl<O: ?Sized> WatchContext<O> {
         } else {
             None
         };
+        let next_frame = Rc::default();
+        let next_frame_weak = Rc::downgrade(&next_frame);
         WatchContext {
-            next_frame: Rc::default(),
+            next_frame,
+            next_frame_weak,
             frame_limit,
+            owner: O::default(),
         }
+    }
+}
+
+impl<O> WatchContext<O> {
+    pub fn add_watcher<T>(&mut self, holder: &T)
+    where
+        T: 'static + ?Sized + WatcherHolder<O>,
+    {
+        crate::watcher::init_watcher(
+            &self.next_frame_weak,
+            holder,
+            &mut self.owner,
+        );
+    }
+
+    pub fn owner(&mut self) -> &mut O {
+        &mut self.owner
     }
 
     pub fn update(&mut self) {
         //self.chan_ctx.check_for_activity();
-        let weak_next = Rc::downgrade(&self.next_frame);
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.next_frame.empty() {
                 if frame_limit == 0 {
@@ -44,12 +69,14 @@ impl<O: ?Sized> WatchContext<O> {
                         current_watch_names,
                     );
                 }
-                self.next_frame.execute(todo!(), &weak_next);
+                self.next_frame
+                    .execute(&mut self.owner, &self.next_frame_weak);
                 frame_limit -= 1;
             }
         } else {
             while !self.next_frame.empty() {
-                self.next_frame.execute(todo!(), &weak_next);
+                self.next_frame
+                    .execute(&mut self.owner, &self.next_frame_weak);
             }
         }
     }
@@ -102,8 +129,25 @@ impl<O: ?Sized> WatchContext<O> {
     */
 }
 
-impl<O: ?Sized> Default for WatchContext<O> {
+impl<O: Default> Default for WatchContext<O> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Default)]
+pub struct DefaultOwner {
+    owners: Vec<Box<dyn Any>>,
+}
+
+impl DefaultOwner {
+    pub fn add_owner<T: Any>(&mut self, owner: T) {
+        self.owners.push(Box::new(owner));
+    }
+
+    pub fn get_owner<T: Any>(&mut self) -> impl Iterator<Item = &mut T> {
+        self.owners
+            .iter_mut()
+            .filter_map(|boxed| boxed.downcast_mut::<T>())
     }
 }

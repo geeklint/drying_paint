@@ -3,13 +3,13 @@
 
 use std::rc::Weak;
 
-use crate::{Watch, WatchArg, WatchSet, WatcherOwner};
+use crate::{DefaultOwner, Watch, WatchArg, WatchSet};
 
-pub trait WatcherContent<O: ?Sized = dyn WatcherOwner> {
+pub trait WatcherContent<O: ?Sized = DefaultOwner> {
     fn init(init: impl WatcherInit<Self, O>);
 }
 
-pub trait WatcherInit<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
+pub trait WatcherInit<T: ?Sized, O: ?Sized = DefaultOwner> {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut T) -> &mut Ch,
@@ -19,6 +19,7 @@ pub trait WatcherInit<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
     /// values referenced inside change.
     fn watch<F>(&mut self, func: F)
     where
+        Self: WatcherInit<T, DefaultOwner>,
         F: 'static + Fn(&mut T);
 
     /// Use this to set up a function which should be re-run whenever watched
@@ -37,38 +38,64 @@ pub trait WatcherInit<T: ?Sized, O: ?Sized = dyn WatcherOwner> {
     */
 }
 
-pub(crate) trait WatcherPath<O: ?Sized>: Clone {
-    type Item: ?Sized;
+pub trait WatcherHolder<O: ?Sized>: Clone {
+    type Content: ?Sized + WatcherContent<O>;
 
     fn get_mut<F>(&self, owner: &mut O, f: F)
     where
-        F: FnOnce(&mut Self::Item);
+        F: FnOnce(&mut Self::Content);
+}
 
-    fn map<U, F>(self, map: F) -> MapWatcherPath<Self, F>
+impl<T, O> WatcherHolder<O> for Weak<core::cell::RefCell<T>>
+where
+    T: ?Sized + WatcherContent<O>,
+    O: ?Sized,
+{
+    type Content = T;
+
+    fn get_mut<F>(&self, _owner: &mut O, f: F)
     where
-        F: Fn(&mut Self::Item) -> &mut U,
+        F: FnOnce(&mut Self::Content),
     {
-        MapWatcherPath { base: self, map }
+        if let Some(strong) = self.upgrade() {
+            f(&mut *strong.borrow_mut());
+        }
     }
 }
 
+pub(crate) fn init_watcher<T, O>(
+    post_set: &Weak<WatchSet<O>>,
+    holder: &T,
+    owner: &mut O,
+) where
+    T: 'static + ?Sized + WatcherHolder<O>,
+    O: ?Sized,
+{
+    T::Content::init(WatcherInitImpl {
+        owner,
+        path: holder,
+        post_set,
+    });
+}
+
 #[derive(Clone)]
-pub(crate) struct MapWatcherPath<Base, Map> {
+struct MapWatcherHolder<Base, Map> {
     base: Base,
     map: Map,
 }
 
-impl<Base, Map, Res: ?Sized, Owner: ?Sized> WatcherPath<Owner>
-    for MapWatcherPath<Base, Map>
+impl<Base, Map, Res: ?Sized, Owner: ?Sized> WatcherHolder<Owner>
+    for MapWatcherHolder<Base, Map>
 where
-    Base: WatcherPath<Owner>,
-    Map: Clone + Fn(&mut Base::Item) -> &mut Res,
+    Base: WatcherHolder<Owner>,
+    Map: Clone + Fn(&mut Base::Content) -> &mut Res,
+    Res: WatcherContent<Owner>,
 {
-    type Item = Res;
+    type Content = Res;
 
     fn get_mut<F>(&self, owner: &mut Owner, f: F)
     where
-        F: FnOnce(&mut Self::Item),
+        F: FnOnce(&mut Self::Content),
     {
         let map = &self.map;
         self.base.get_mut(owner, |item| f(map(item)));
@@ -78,13 +105,13 @@ where
 struct WatcherInitImpl<'a, Owner: ?Sized, Path> {
     post_set: &'a Weak<WatchSet<Owner>>,
     owner: &'a mut Owner,
-    path: Path,
+    path: &'a Path,
 }
 
 impl<'a, Owner: ?Sized, Path, Content: ?Sized> WatcherInit<Content, Owner>
     for WatcherInitImpl<'a, Owner, Path>
 where
-    Path: 'static + WatcherPath<Owner, Item = Content>,
+    Path: 'static + WatcherHolder<Owner, Content = Content>,
 {
     fn init_child<F, Ch>(&mut self, func: F)
     where
@@ -94,15 +121,21 @@ where
         Ch::init(WatcherInitImpl {
             post_set: self.post_set,
             owner: self.owner,
-            path: self.path.clone().map(func),
+            path: &MapWatcherHolder {
+                base: self.path.clone(),
+                map: func,
+            },
         });
     }
 
     fn watch<F>(&mut self, func: F)
     where
+        Self: WatcherInit<Content, DefaultOwner>,
         F: 'static + Fn(&mut Content),
     {
-        todo!()
+        self.watch_explicit(move |arg, content| {
+            arg.use_as_current(|| func(content));
+        });
     }
 
     fn watch_explicit<F>(&mut self, func: F)

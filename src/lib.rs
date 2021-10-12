@@ -148,10 +148,10 @@
 
 mod trigger;
 pub use trigger::WatchArg;
-use trigger::{Watch, WatchRef, WatchSet};
+use trigger::{Watch, WatchSet};
 
 mod context;
-pub use context::WatchContext;
+pub use context::{DefaultOwner, WatchContext};
 
 mod watched_core;
 pub use watched_core::{WatchedCellCore, WatchedCore, WatchedMeta};
@@ -162,7 +162,7 @@ pub use watched::{Watched, WatchedCell};
 */
 
 mod watcher;
-pub use watcher::{WatcherContent, WatcherInit};
+pub use watcher::{WatcherContent, WatcherHolder, WatcherInit};
 
 /*
 mod event;
@@ -174,8 +174,6 @@ pub use channels::{
     WatchedReceiver, WatchedSender,
 };
 */
-
-pub trait WatcherOwner {}
 
 #[cfg(test)]
 mod tests {
