@@ -175,133 +175,71 @@ pub use channels::{
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
 
-    #[derive(Default)]
-    struct Inner {
-        value: Watched<i32>,
-    }
-
-    type Outer = Watcher<OuterData>;
-
-    #[derive(Default)]
-    struct OuterData {
-        value: i32,
-        inner: Inner,
-    }
-
-    impl OuterData {
-        fn set_inner(&mut self, value: i32) {
-            *self.inner.value = value;
-        }
-    }
-
-    impl WatcherInit for OuterData {
-        fn init(watcher: &mut WatcherMeta<Self>) {
-            watcher.watch(|root| {
-                root.value = *root.inner.value;
-            });
-        }
-    }
-
     #[test]
-    fn test_propogate() {
-        let mut ctx = WatchContext::new();
-        ctx = ctx
-            .with(|| {
-                let outer = WatchContext::allow_watcher_access((), |()| {
-                    let mut outer = Outer::new();
-                    outer.data_mut().set_inner(37);
-                    outer
-                });
-                WatchContext::update_current();
-                WatchContext::allow_watcher_access(outer, |outer| {
-                    assert_eq!(outer.data().value, 37);
-                });
-            })
-            .0;
-        std::mem::drop(ctx);
-    }
-
-    #[derive(Default)]
-    struct InnerId {
-        value: Option<WatcherId>,
-    }
-
-    impl WatcherInit for InnerId {
-        fn init(watcher: &mut WatcherMeta<Self>) {
-            let id = watcher.id();
-            watcher.watch(move |root| {
-                root.value = Some(id.clone());
-            });
+    fn simple_propogate() {
+        struct Content {
+            dest: i32,
+            source: Watched<i32>,
         }
-    }
 
-    #[test]
-    fn test_meta_id() {
-        let mut ctx = WatchContext::new();
-        ctx = ctx
-            .with(|| {
-                let watcher: Watcher<InnerId> =
-                    WatchContext::allow_watcher_access((), |()| {
-                        Watcher::new()
-                    });
-                let watcher_id = Some(watcher.id());
-                let (watcher, watcher_id) = WatchContext::allow_watcher_access(
-                    (watcher, watcher_id),
-                    |(watcher, watcher_id)| {
-                        assert_eq!(watcher.data().value, watcher_id);
-                        (watcher, watcher_id)
-                    },
-                );
-
-                let other: Watcher<InnerId> =
-                    WatchContext::allow_watcher_access((), |()| {
-                        Watcher::new()
-                    });
-                let other_id = Some(other.id());
-                WatchContext::allow_watcher_access(
-                    (watcher, other),
-                    move |(watcher, other)| {
-                        assert_ne!(other.data().value, watcher_id);
-                        assert_ne!(watcher.data().value, other_id);
-                    },
-                );
-            })
-            .0;
-        std::mem::drop(ctx);
-    }
-
-    #[derive(Default)]
-    struct MutsTwice {
-        value: Watched<i32>,
-    }
-
-    impl WatcherInit for MutsTwice {
-        fn init(watcher: &mut WatcherMeta<Self>) {
-            watcher.watch(|root| {
-                root.value += 1;
-                root.value += 1;
-            });
+        impl WatcherContent for Content {
+            fn init(mut init: impl WatcherInit<Self>) {
+                init.watch(|root| {
+                    root.dest = *root.source;
+                });
+            }
         }
+        let content = Rc::new(RefCell::new(Content {
+            dest: 0,
+            source: Watched::new(37),
+        }));
+        let weak = Rc::downgrade(&content);
+
+        let mut ctx: WatchContext = WatchContext::new();
+        assert_eq!(content.borrow().dest, 0);
+        ctx.add_watcher(&weak);
+        assert_eq!(content.borrow().dest, 37);
+        *content.borrow_mut().source = 43;
+        assert_eq!(content.borrow().dest, 37);
+        ctx.update();
+        assert_eq!(content.borrow().dest, 43);
+        ctx.update();
+        assert_eq!(content.borrow().dest, 43);
     }
 
     #[test]
     fn double_mut_in_watch() {
-        let mut ctx = WatchContext::new();
-        ctx.set_frame_limit(Some(100));
-        ctx = ctx
-            .with(|| {
-                let watcher: Watcher<MutsTwice> =
-                    WatchContext::allow_watcher_access((), |()| {
-                        Watcher::new()
-                    });
-                WatchContext::update_current();
-                WatchContext::allow_watcher_access(watcher, move |watcher| {
-                    assert_eq!(watcher.data().value, 2);
+        #[derive(Default)]
+        struct MutsTwice {
+            value: Watched<i32>,
+        }
+
+        impl WatcherContent for MutsTwice {
+            fn init(mut init: impl WatcherInit<Self>) {
+                init.watch(|root| {
+                    root.value += 1;
+                    root.value += 1;
                 });
-            })
-            .0;
-        std::mem::drop(ctx);
+            }
+        }
+
+        let content = Rc::new(RefCell::new(MutsTwice {
+            value: Watched::new(0_i32),
+        }));
+        let weak = Rc::downgrade(&content);
+
+        let mut ctx: WatchContext = WatchContext::new();
+        ctx.set_frame_limit(Some(100));
+        ctx.add_watcher(&weak);
+        assert_eq!(*content.borrow().value, 2);
+        ctx.update();
+        assert_eq!(*content.borrow().value, 2);
+        *content.borrow_mut().value = 41;
+        ctx.update();
+        assert_eq!(*content.borrow().value, 43);
     }
 }

@@ -361,93 +361,65 @@ impl<T> From<T> for WatchedCell<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use crate::*;
 
     #[test]
-    fn test_watched_add() {
+    fn watched_add() {
         let left = Watched::new(587);
-        assert_eq!((&left) + 13, 600);
-        assert_eq!(left + 13, 600);
-    }
-
-    #[derive(Default)]
-    struct Inner {
-        value: Watched<u32>,
-    }
-
-    type Outer = Watcher<OuterData>;
-
-    #[derive(Default)]
-    struct OuterData {
-        value: u32,
-        inner: Inner,
-    }
-
-    impl WatcherInit for OuterData {
-        fn init(watcher: &mut WatcherMeta<Self>) {
-            watcher.watch(|root| {
-                root.value = *root.inner.value;
-            });
-        }
+        assert_eq!(&left + 13, 600);
     }
 
     #[test]
-    fn test_add_to_watched() {
-        let mut ctx = WatchContext::new();
-        ctx = ctx
-            .with(|| {
-                let outer = WatchContext::allow_watcher_access((), |()| {
-                    let mut outer = Outer::new();
-                    *outer.data_mut().inner.value = 587;
-                    outer
-                });
-                WatchContext::update_current();
-                let outer =
-                    WatchContext::allow_watcher_access(outer, |mut outer| {
-                        assert_eq!(outer.data().value, 587);
-                        outer.data_mut().inner.value += 13;
-                        outer
-                    });
-                WatchContext::update_current();
-                WatchContext::allow_watcher_access(outer, |outer| {
-                    assert_eq!(outer.data().value, 600);
-                });
-            })
-            .0;
-        std::mem::drop(ctx);
-    }
-
-    #[derive(Default)]
-    struct OuterXorData {
-        value: u32,
-        inner: Inner,
-    }
-
-    impl WatcherInit for OuterXorData {
-        fn init(watcher: &mut WatcherMeta<Self>) {
-            watcher.watch(|root| {
-                root.value = &root.inner.value ^ 0xffffffff;
-            });
+    fn add_to_watched() {
+        struct Content {
+            dest: u32,
+            source: Watched<u32>,
         }
+
+        impl WatcherContent for Content {
+            fn init(mut init: impl WatcherInit<Self>) {
+                init.watch(|root| {
+                    root.dest = *root.source;
+                });
+            }
+        }
+        let content = Rc::new(RefCell::new(Content {
+            dest: 0,
+            source: Watched::new(587),
+        }));
+        let weak = Rc::downgrade(&content);
+        let mut ctx = WatchContext::new();
+        ctx.add_watcher(&weak);
+        assert_eq!(content.borrow().dest, 587);
+        content.borrow_mut().source += 13;
+        ctx.update();
+        assert_eq!(content.borrow().dest, 600);
     }
 
     #[test]
-    fn test_xor_watch() {
+    fn watched_xor() {
+        #[derive(Default)]
+        struct Content {
+            dest: u32,
+            source: Watched<u32>,
+        }
+
+        impl WatcherContent for Content {
+            fn init(mut init: impl WatcherInit<Self>) {
+                init.watch(|root| {
+                    root.dest = &root.source ^ 0xffffffff;
+                });
+            }
+        }
+        let content = Rc::new(RefCell::new(Content::default()));
+        let weak = Rc::downgrade(&content);
         let mut ctx = WatchContext::new();
-        ctx = ctx
-            .with(|| {
-                let outer = WatchContext::allow_watcher_access((), |()| {
-                    let mut outer = Watcher::<OuterXorData>::new();
-                    *outer.data_mut().inner.value = 960294194;
-                    outer
-                });
-                WatchContext::update_current();
-                WatchContext::allow_watcher_access(outer, |outer| {
-                    assert_eq!(outer.data().value, 3334673101);
-                });
-            })
-            .0;
-        std::mem::drop(ctx);
+        ctx.add_watcher(&weak);
+        *content.borrow_mut().source = 960294194;
+        ctx.update();
+        assert_eq!(content.borrow().dest, 3334673101);
     }
 
     #[test]
