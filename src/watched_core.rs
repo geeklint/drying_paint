@@ -148,6 +148,18 @@ impl<T: PartialEq, O: ?Sized> WatchedCore<T, O> {
     }
 }
 
+impl<T: PartialEq> WatchedCore<T, DefaultOwner> {
+    /// This function provides a way to set a value for a watched value
+    /// only if is has changed.  This is useful for cases where setting a
+    /// value would otherwise cause an infinite loop.
+    pub fn set_if_neq_auto(&mut self, value: T) {
+        if self.value != value {
+            self.value = value;
+            self.meta.trigger_auto();
+        }
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<'ctx, T: serde::Serialize + ?Sized> serde::Serialize
     for WatchedCore<T, Ctx<'ctx>>

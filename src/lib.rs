@@ -156,10 +156,8 @@ pub use context::{DefaultOwner, WatchContext};
 mod watched_core;
 pub use watched_core::{WatchedCellCore, WatchedCore, WatchedMeta};
 
-/*
 mod watched;
 pub use watched::{Watched, WatchedCell};
-*/
 
 mod watcher;
 pub use watcher::{WatcherContent, WatcherHolder, WatcherInit};

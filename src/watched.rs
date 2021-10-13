@@ -4,14 +4,14 @@
 use core::fmt;
 use core::ops::{Deref, DerefMut};
 
-use crate::{context::Ctx, WatchedCellCore, WatchedCore};
+use crate::{DefaultOwner, WatchedCellCore, WatchedCore};
 
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
 /// changes.
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct Watched<T: ?Sized> {
-    inner: WatchedCore<T, Ctx<'static>>,
+    inner: WatchedCore<T, DefaultOwner>,
 }
 
 impl<T> Watched<T> {
@@ -38,7 +38,7 @@ impl<T: ?Sized> Watched<T> {
     /// Get a referenced to the wrapped value, without binding the current
     /// watch closure.
     pub fn get_unwatched(this: &Self) -> &T {
-        &this.get_unwatched()
+        this.inner.get_unwatched()
     }
 }
 
@@ -92,11 +92,7 @@ impl<T: PartialEq> Watched<T> {
     ///     });
     /// }
     pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
-        if wrapper.value != value {
-            wrapper.value = value;
-            wrapper.meta.trigger();
-            wrapper.meta.watched();
-        }
+        wrapper.inner.set_if_neq_auto(value);
     }
 }
 
@@ -151,6 +147,7 @@ mod watched_ops {
 
     macro_rules! watched_unop {
         (impl $imp:ident, $method:ident) => {
+            /*
             impl<T: $imp> $imp for Watched<T> {
                 type Output = <T as $imp>::Output;
 
@@ -158,6 +155,7 @@ mod watched_ops {
                     $imp::$method(self.inner.get_auto())
                 }
             }
+            */
 
             impl<'a, T: ?Sized> $imp for &'a Watched<T>
             where
@@ -166,7 +164,7 @@ mod watched_ops {
                 type Output = <&'a T as $imp>::Output;
 
                 fn $method(self) -> <&'a T as $imp>::Output {
-                    $imp::$method(&self.inner.get_auto())
+                    $imp::$method(self.inner.get_auto())
                 }
             }
         };
@@ -174,6 +172,7 @@ mod watched_ops {
 
     macro_rules! watched_binop {
         (impl $imp:ident, $method:ident) => {
+            /*
             impl<T, U> $imp<U> for Watched<T>
             where
                 T: $imp<U>,
@@ -184,6 +183,7 @@ mod watched_ops {
                     $imp::$method(self.inner.get_auto(), other)
                 }
             }
+            */
 
             impl<'a, T, U> $imp<U> for &'a Watched<T>
             where
@@ -207,8 +207,6 @@ mod watched_ops {
             {
                 fn $method(&mut self, rhs: U) {
                     $imp::$method(self.inner.get_mut_auto(), rhs);
-                    self.meta.trigger();
-                    self.meta.watched();
                 }
             }
         };
@@ -293,7 +291,7 @@ mod watched_ops {
 /// `RefCell<Watched<T>>`.
 #[derive(Default)]
 pub struct WatchedCell<T: ?Sized> {
-    inner: WatchedCellCore<T, Ctx<'static>>,
+    inner: WatchedCellCore<T, DefaultOwner>,
 }
 
 impl<T: ?Sized> WatchedCell<T> {
@@ -345,7 +343,7 @@ impl<T: Copy> WatchedCell<T> {
 impl<T: Default> WatchedCell<T> {
     /// Takes the watched value, leaving `Default::default()` in its place
     pub fn take(&self) -> T {
-        self.value.take_auto()
+        self.inner.take_auto()
     }
 }
 
