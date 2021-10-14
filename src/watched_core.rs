@@ -10,11 +10,11 @@ use crate::{DefaultOwner, WatchArg, WatchSet};
 /// [Watched](struct.Watched.html) and
 /// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
 #[derive(Default)]
-pub struct WatchedMeta<O: ?Sized = DefaultOwner> {
-    watchers: WatchSet<O>,
+pub struct WatchedMeta<'ctx, O: ?Sized = DefaultOwner> {
+    watchers: WatchSet<'ctx, O>,
 }
 
-impl<O: ?Sized> WatchedMeta<O> {
+impl<'ctx, O: ?Sized> WatchedMeta<'ctx, O> {
     /// Create a new WatchedMeta instance
     pub fn new() -> Self {
         WatchedMeta {
@@ -24,13 +24,13 @@ impl<O: ?Sized> WatchedMeta<O> {
 
     /// When run in a function designed to watch a value, will bind so that
     /// function will be re-run when this is triggered.
-    pub fn watched(&self, ctx: WatchArg<'_, O>) {
+    pub fn watched(&self, ctx: WatchArg<'_, 'ctx, O>) {
         self.watchers.add(ctx.watch.get_ref(), ctx.post_set);
     }
 
     /// Mark this value as having changed, so that watching functions will
     /// be marked as needing to be updated.
-    pub fn trigger(&self, ctx: WatchArg<'_, O>) {
+    pub fn trigger(&self, ctx: WatchArg<'_, 'ctx, O>) {
         self.watchers.trigger_with_current(ctx.watch);
     }
 
@@ -39,7 +39,7 @@ impl<O: ?Sized> WatchedMeta<O> {
     }
 }
 
-impl WatchedMeta {
+impl WatchedMeta<'static> {
     pub fn watched_auto(&self) {
         WatchArg::try_with_current(|arg| self.watched(arg));
     }
@@ -54,24 +54,24 @@ impl WatchedMeta {
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
 /// changes.
-pub struct WatchedCore<T: ?Sized, O: ?Sized = DefaultOwner> {
-    meta: WatchedMeta<O>,
+pub struct WatchedCore<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
+    meta: WatchedMeta<'ctx, O>,
     value: T,
 }
 
-impl<T: Default, O: ?Sized> Default for WatchedCore<T, O> {
+impl<'ctx, T: Default, O: ?Sized> Default for WatchedCore<'ctx, T, O> {
     fn default() -> Self {
         Self::new(T::default())
     }
 }
 
-impl<T, O: ?Sized> From<T> for WatchedCore<T, O> {
+impl<'ctx, T, O: ?Sized> From<T> for WatchedCore<'ctx, T, O> {
     fn from(value: T) -> Self {
         Self::new(value)
     }
 }
 
-impl<T, O: ?Sized> WatchedCore<T, O> {
+impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// Create a new watched value.
     pub fn new(value: T) -> Self {
         Self {
@@ -88,23 +88,28 @@ impl<T, O: ?Sized> WatchedCore<T, O> {
     /// Takes the wrapped value, with a new one, returning the old value,
     /// without deinitializing either one, and notifies watchers that the
     /// value has changed.
-    pub fn replace(&mut self, value: T, ctx: WatchArg<'_, O>) -> T {
+    pub fn replace(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>) -> T {
         core::mem::replace(self.get_mut(ctx), value)
     }
 }
 
-impl<T: ?Sized, O: ?Sized> WatchedCore<T, O> {
+impl<'ctx, T: ?Sized, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// Get a referenced to the wrapped value, binding a watch closure.
-    pub fn get(&self, ctx: WatchArg<'_, O>) -> &T {
+    pub fn get(&self, ctx: WatchArg<'_, 'ctx, O>) -> &T {
         self.meta.watched(ctx);
         &self.value
     }
 
     /// Get a mutable referenced to the wrapped value, notifying
     /// watchers that the value has changed.
-    pub fn get_mut(&mut self, ctx: WatchArg<'_, O>) -> &mut T {
+    pub fn get_mut(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> &mut T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
+        &mut self.value
+    }
+
+    pub fn get_mut_external(&mut self) -> &mut T {
+        self.meta.trigger_external();
         &mut self.value
     }
 
@@ -115,7 +120,7 @@ impl<T: ?Sized, O: ?Sized> WatchedCore<T, O> {
     }
 }
 
-impl<T: ?Sized> WatchedCore<T, DefaultOwner> {
+impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
     pub fn get_auto(&self) -> &T {
         self.meta.watched_auto();
         &self.value
@@ -128,19 +133,19 @@ impl<T: ?Sized> WatchedCore<T, DefaultOwner> {
     }
 }
 
-impl<T: Default, O: ?Sized> WatchedCore<T, O> {
+impl<'ctx, T: Default, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// Takes the wrapped value, leaving `Default::default()` in its place,
     /// and notifies watchers that the value has changed.
-    pub fn take(&mut self, ctx: WatchArg<'_, O>) -> T {
+    pub fn take(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> T {
         core::mem::take(self.get_mut(ctx))
     }
 }
 
-impl<T: PartialEq, O: ?Sized> WatchedCore<T, O> {
+impl<'ctx, T: PartialEq, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
-    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, O>) {
+    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>) {
         if self.value != value {
             self.value = value;
             self.meta.trigger(ctx);
@@ -148,7 +153,7 @@ impl<T: PartialEq, O: ?Sized> WatchedCore<T, O> {
     }
 }
 
-impl<T: PartialEq> WatchedCore<T, DefaultOwner> {
+impl<T: PartialEq> WatchedCore<'static, T, DefaultOwner> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
@@ -189,41 +194,41 @@ where
 /// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
 /// would not, and should be slightly more performant than
 /// `RefCell<Watched<T>>`.
-pub struct WatchedCellCore<T: ?Sized, O: ?Sized = DefaultOwner> {
-    meta: WatchedMeta<O>,
+pub struct WatchedCellCore<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
+    meta: WatchedMeta<'ctx, O>,
     value: Cell<T>,
 }
 
-impl<T: Default, O: ?Sized> Default for WatchedCellCore<T, O> {
+impl<'ctx, T: Default, O: ?Sized> Default for WatchedCellCore<'ctx, T, O> {
     fn default() -> Self {
         Self::new(T::default())
     }
 }
 
-impl<T, O: ?Sized> From<T> for WatchedCellCore<T, O> {
+impl<'ctx, T, O: ?Sized> From<T> for WatchedCellCore<'ctx, T, O> {
     fn from(value: T) -> Self {
         Self::new(value)
     }
 }
 
-impl<T: ?Sized, O: ?Sized> WatchedCellCore<T, O> {
+impl<'ctx, T: ?Sized, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     /// Returns a mutable reference to the watched data.
     ///
     /// This call borrows the WatchedCell mutably (at compile-time) which
     /// guarantees that we possess the only reference.
-    pub fn get_mut(&mut self, ctx: WatchArg<'_, O>) -> &mut T {
+    pub fn get_mut(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> &mut T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.get_mut()
     }
 
     /// Treat this WatchedCell as watched, without fetching the actual value.
-    pub fn watched(&self, ctx: WatchArg<'_, O>) {
+    pub fn watched(&self, ctx: WatchArg<'_, 'ctx, O>) {
         self.meta.watched(ctx);
     }
 }
 
-impl<T: ?Sized> WatchedCellCore<T, DefaultOwner> {
+impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn get_mut_auto(&mut self) -> &mut T {
         self.meta.trigger_auto();
         self.meta.watched_auto();
@@ -235,7 +240,7 @@ impl<T: ?Sized> WatchedCellCore<T, DefaultOwner> {
     }
 }
 
-impl<T, O: ?Sized> WatchedCellCore<T, O> {
+impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     /// Create a new WatchedCell
     pub fn new(value: T) -> Self {
         Self {
@@ -245,7 +250,7 @@ impl<T, O: ?Sized> WatchedCellCore<T, O> {
     }
 
     /// Sets the watched value
-    pub fn set(&self, value: T, ctx: WatchArg<'_, O>) {
+    pub fn set(&self, value: T, ctx: WatchArg<'_, 'ctx, O>) {
         self.meta.trigger(ctx);
         self.value.set(value);
     }
@@ -256,14 +261,14 @@ impl<T, O: ?Sized> WatchedCellCore<T, O> {
     }
 
     /// Replaces the contained value and returns the previous value
-    pub fn replace(&self, value: T, ctx: WatchArg<'_, O>) -> T {
+    pub fn replace(&self, value: T, ctx: WatchArg<'_, 'ctx, O>) -> T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.replace(value)
     }
 }
 
-impl<T> WatchedCellCore<T, DefaultOwner> {
+impl<T> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn set_auto(&self, value: T) {
         self.meta.trigger_auto();
         self.value.set(value);
@@ -276,9 +281,9 @@ impl<T> WatchedCellCore<T, DefaultOwner> {
     }
 }
 
-impl<T: Copy, O: ?Sized> WatchedCellCore<T, O> {
+impl<'ctx, T: Copy, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     /// Returns a copy of the watched value
-    pub fn get(&self, ctx: WatchArg<'_, O>) -> T {
+    pub fn get(&self, ctx: WatchArg<'_, 'ctx, O>) -> T {
         self.meta.watched(ctx);
         self.value.get()
     }
@@ -288,23 +293,23 @@ impl<T: Copy, O: ?Sized> WatchedCellCore<T, O> {
     }
 }
 
-impl<T: Copy> WatchedCellCore<T, DefaultOwner> {
+impl<T: Copy> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn get_auto(&self) -> T {
         self.meta.watched_auto();
         self.value.get()
     }
 }
 
-impl<T: Default, O: ?Sized> WatchedCellCore<T, O> {
+impl<'ctx, T: Default, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     /// Takes the watched value, leaving `Default::default()` in its place
-    pub fn take(&self, ctx: WatchArg<'_, O>) -> T {
+    pub fn take(&self, ctx: WatchArg<'_, 'ctx, O>) -> T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.take()
     }
 }
 
-impl<T: Default> WatchedCellCore<T, DefaultOwner> {
+impl<T: Default> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn take_auto(&self) -> T {
         self.meta.trigger_auto();
         self.meta.watched_auto();

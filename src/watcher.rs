@@ -5,28 +5,28 @@ use std::rc::Weak;
 
 use crate::{DefaultOwner, Watch, WatchArg, WatchSet};
 
-pub trait WatcherContent<O: ?Sized = DefaultOwner> {
-    fn init(init: impl WatcherInit<Self, O>);
+pub trait WatcherContent<'ctx, O: ?Sized = DefaultOwner> {
+    fn init(init: impl WatcherInit<'ctx, Self, O>);
 }
 
-pub trait WatcherInit<T: ?Sized, O: ?Sized = DefaultOwner> {
+pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut T) -> &mut Ch,
-        Ch: WatcherContent<O>;
+        Ch: WatcherContent<'ctx, O>;
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
     fn watch<F>(&mut self, func: F)
     where
-        Self: WatcherInit<T, DefaultOwner>,
+        Self: WatcherInit<'static, T, DefaultOwner>,
         F: 'static + Fn(&mut T);
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
     fn watch_explicit<F>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg<'_, O>, &mut T);
+        F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T);
 
     /*
         /// Watches have a debug name used in some error messages.  It defaults to
@@ -38,17 +38,17 @@ pub trait WatcherInit<T: ?Sized, O: ?Sized = DefaultOwner> {
     */
 }
 
-pub trait WatcherHolder<O: ?Sized>: Clone {
-    type Content: ?Sized + WatcherContent<O>;
+pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
+    type Content: ?Sized + WatcherContent<'ctx, O>;
 
     fn get_mut<F>(&self, owner: &mut O, f: F)
     where
         F: FnOnce(&mut Self::Content);
 }
 
-impl<T, O> WatcherHolder<O> for Weak<core::cell::RefCell<T>>
+impl<'ctx, T, O> WatcherHolder<'ctx, O> for Weak<core::cell::RefCell<T>>
 where
-    T: ?Sized + WatcherContent<O>,
+    T: ?Sized + WatcherContent<'ctx, O>,
     O: ?Sized,
 {
     type Content = T;
@@ -63,12 +63,12 @@ where
     }
 }
 
-pub(crate) fn init_watcher<T, O>(
-    post_set: &Weak<WatchSet<O>>,
+pub(crate) fn init_watcher<'ctx, T, O>(
+    post_set: &Weak<WatchSet<'ctx, O>>,
     holder: &T,
     owner: &mut O,
 ) where
-    T: 'static + ?Sized + WatcherHolder<O>,
+    T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
     O: ?Sized,
 {
     T::Content::init(WatcherInitImpl {
@@ -84,12 +84,12 @@ struct MapWatcherHolder<Base, Map> {
     map: Map,
 }
 
-impl<Base, Map, Res: ?Sized, Owner: ?Sized> WatcherHolder<Owner>
+impl<'ctx, Base, Map, Res: ?Sized, Owner: ?Sized> WatcherHolder<'ctx, Owner>
     for MapWatcherHolder<Base, Map>
 where
-    Base: WatcherHolder<Owner>,
+    Base: WatcherHolder<'ctx, Owner>,
     Map: Clone + Fn(&mut Base::Content) -> &mut Res,
-    Res: WatcherContent<Owner>,
+    Res: WatcherContent<'ctx, Owner>,
 {
     type Content = Res;
 
@@ -102,21 +102,22 @@ where
     }
 }
 
-struct WatcherInitImpl<'a, Owner: ?Sized, Path> {
-    post_set: &'a Weak<WatchSet<Owner>>,
+struct WatcherInitImpl<'a, 'ctx, Owner: ?Sized, Path> {
+    post_set: &'a Weak<WatchSet<'ctx, Owner>>,
     owner: &'a mut Owner,
     path: &'a Path,
 }
 
-impl<'a, Owner: ?Sized, Path, Content: ?Sized> WatcherInit<Content, Owner>
-    for WatcherInitImpl<'a, Owner, Path>
+impl<'a, 'ctx, Owner: ?Sized, Path, Content: ?Sized>
+    WatcherInit<'ctx, Content, Owner>
+    for WatcherInitImpl<'a, 'ctx, Owner, Path>
 where
-    Path: 'static + WatcherHolder<Owner, Content = Content>,
+    Path: 'ctx + WatcherHolder<'ctx, Owner, Content = Content>,
 {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut Content) -> &mut Ch,
-        Ch: WatcherContent<Owner>,
+        Ch: WatcherContent<'ctx, Owner>,
     {
         Ch::init(WatcherInitImpl {
             post_set: self.post_set,
@@ -130,7 +131,7 @@ where
 
     fn watch<F>(&mut self, func: F)
     where
-        Self: WatcherInit<Content, DefaultOwner>,
+        Self: WatcherInit<'static, Content, DefaultOwner>,
         F: 'static + Fn(&mut Content),
     {
         self.watch_explicit(move |arg, content| {
@@ -140,7 +141,7 @@ where
 
     fn watch_explicit<F>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg<'_, Owner>, &mut Content),
+        F: 'static + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content),
     {
         let current_path = self.path.clone();
         Watch::spawn(self.owner, self.post_set, move |owner, arg| {

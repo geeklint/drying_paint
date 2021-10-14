@@ -8,14 +8,14 @@ use {
 
 use crate::{WatchSet, WatcherHolder};
 
-pub struct WatchContext<O = DefaultOwner> {
-    next_frame: Rc<WatchSet<O>>,
-    next_frame_weak: Weak<WatchSet<O>>,
+pub struct WatchContext<'ctx, O = DefaultOwner> {
+    next_frame: Rc<WatchSet<'ctx, O>>,
+    next_frame_weak: Weak<WatchSet<'ctx, O>>,
     frame_limit: Option<usize>,
     owner: O,
 }
 
-impl<O: Default> WatchContext<O> {
+impl<'ctx, O: Default> WatchContext<'ctx, O> {
     /// Create a new WatchContext
     pub fn new() -> Self {
         let frame_limit = if cfg!(debug_assertions) {
@@ -34,10 +34,10 @@ impl<O: Default> WatchContext<O> {
     }
 }
 
-impl<O> WatchContext<O> {
+impl<'ctx, O> WatchContext<'ctx, O> {
     pub fn add_watcher<T>(&mut self, holder: &T)
     where
-        T: 'static + ?Sized + WatcherHolder<O>,
+        T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
     {
         crate::watcher::init_watcher(
             &self.next_frame_weak,
@@ -129,7 +129,7 @@ impl<O> WatchContext<O> {
     */
 }
 
-impl<O: Default> Default for WatchContext<O> {
+impl<'ctx, O: Default> Default for WatchContext<'ctx, O> {
     fn default() -> Self {
         Self::new()
     }

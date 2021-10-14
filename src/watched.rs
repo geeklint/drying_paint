@@ -11,7 +11,7 @@ use crate::{DefaultOwner, WatchedCellCore, WatchedCore};
 /// changes.
 #[derive(Default)]
 pub struct Watched<T: ?Sized> {
-    inner: WatchedCore<T, DefaultOwner>,
+    inner: WatchedCore<'static, T, DefaultOwner>,
 }
 
 impl<T> Watched<T> {
@@ -291,7 +291,7 @@ mod watched_ops {
 /// `RefCell<Watched<T>>`.
 #[derive(Default)]
 pub struct WatchedCell<T: ?Sized> {
-    inner: WatchedCellCore<T, DefaultOwner>,
+    inner: WatchedCellCore<'static, T, DefaultOwner>,
 }
 
 impl<T: ?Sized> WatchedCell<T> {
@@ -378,8 +378,8 @@ mod tests {
             source: Watched<u32>,
         }
 
-        impl WatcherContent for Content {
-            fn init(mut init: impl WatcherInit<Self>) {
+        impl WatcherContent<'static> for Content {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = *root.source;
                 });
@@ -406,8 +406,8 @@ mod tests {
             source: Watched<u32>,
         }
 
-        impl WatcherContent for Content {
-            fn init(mut init: impl WatcherInit<Self>) {
+        impl WatcherContent<'static> for Content {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = &root.source ^ 0xffffffff;
                 });

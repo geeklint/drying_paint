@@ -144,6 +144,7 @@
 //! ```
 
 //#![warn(missing_docs)]
+#![deny(rust_2018_idioms)]
 #![allow(clippy::needless_doctest_main)]
 
 mod trigger;
@@ -180,14 +181,46 @@ mod tests {
     use super::*;
 
     #[test]
+    fn simple_propogate_core() {
+        struct Content {
+            dest: i32,
+            source: WatchedCore<'static, i32>,
+        }
+
+        impl WatcherContent<'static> for Content {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
+                init.watch_explicit(|arg, root| {
+                    root.dest = *root.source.get(arg);
+                });
+            }
+        }
+        let content = Rc::new(RefCell::new(Content {
+            dest: 0,
+            source: WatchedCore::new(37),
+        }));
+        let weak = Rc::downgrade(&content);
+
+        let mut ctx = WatchContext::new();
+        assert_eq!(content.borrow().dest, 0);
+        ctx.add_watcher(&weak);
+        assert_eq!(content.borrow().dest, 37);
+        *content.borrow_mut().source.get_mut_external() = 43;
+        assert_eq!(content.borrow().dest, 37);
+        ctx.update();
+        assert_eq!(content.borrow().dest, 43);
+        ctx.update();
+        assert_eq!(content.borrow().dest, 43);
+    }
+
+    #[test]
     fn simple_propogate() {
         struct Content {
             dest: i32,
             source: Watched<i32>,
         }
 
-        impl WatcherContent for Content {
-            fn init(mut init: impl WatcherInit<Self>) {
+        impl WatcherContent<'static> for Content {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = *root.source;
                 });
@@ -199,7 +232,7 @@ mod tests {
         }));
         let weak = Rc::downgrade(&content);
 
-        let mut ctx: WatchContext = WatchContext::new();
+        let mut ctx = WatchContext::new();
         assert_eq!(content.borrow().dest, 0);
         ctx.add_watcher(&weak);
         assert_eq!(content.borrow().dest, 37);
@@ -218,8 +251,8 @@ mod tests {
             value: Watched<i32>,
         }
 
-        impl WatcherContent for MutsTwice {
-            fn init(mut init: impl WatcherInit<Self>) {
+        impl WatcherContent<'static> for MutsTwice {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.value += 1;
                     root.value += 1;
@@ -232,7 +265,7 @@ mod tests {
         }));
         let weak = Rc::downgrade(&content);
 
-        let mut ctx: WatchContext = WatchContext::new();
+        let mut ctx = WatchContext::new();
         ctx.set_frame_limit(Some(100));
         ctx.add_watcher(&weak);
         assert_eq!(*content.borrow().value, 2);
