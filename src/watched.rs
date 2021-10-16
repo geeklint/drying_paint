@@ -59,38 +59,42 @@ impl<T: PartialEq> Watched<T> {
     /// sync. This would normally cause an infinite loop as each update of
     /// one would cause the other one to re-evaluate. However using set_if_neq
     /// allows it to detect that the value is the same and stop propogating.
+    ///
     /// ```rust
-    /// # use drying_paint::*;
+    ///# use std::{rc::Rc, cell::RefCell};
+    ///# use drying_paint::{Watcher, Watched, WatcherInit, WatchContext};
     /// #[derive(Default)]
     /// struct KeepBalanced {
     ///     left: Watched<i32>,
     ///     right: Watched<i32>,
     /// }
-    /// impl WatcherInit for KeepBalanced {
-    ///     fn init(watcher: &mut WatcherMeta<Self>) {
-    ///         watcher.watch(|root| {
+    ///
+    /// impl Watcher<'static> for KeepBalanced {
+    ///     fn init(mut init: impl WatcherInit<'static, Self>) {
+    ///         init.watch(|root| {
     ///             Watched::set_if_neq(&mut root.left, *root.right);
     ///         });
-    ///         watcher.watch(|root| {
+    ///         init.watch(|root| {
     ///             Watched::set_if_neq(&mut root.right, *root.left);
     ///         });
     ///     }
     /// }
-    /// fn main() {
-    ///     let mut ctx = WatchContext::new();
-    ///     ctx.set_frame_limit(Some(100));
-    ///     ctx.with(|| {
-    ///         let obj = WatchContext::allow_watcher_access((), |()| {
-    ///             let mut obj = Watcher::<KeepBalanced>::new();
-    ///             *obj.data_mut().left = 68;
-    ///             obj
-    ///         });
-    ///         WatchContext::update_current();
-    ///         WatchContext::allow_watcher_access(obj, |obj| {
-    ///             assert_eq!(*obj.data().right, 68);
-    ///         });
-    ///     });
-    /// }
+    ///
+    /// let keep_balanced = Rc::new(RefCell::new(KeepBalanced {
+    ///     left: Watched::new(7),
+    ///     right: Watched::new(7),
+    /// }));
+    /// let weak = Rc::downgrade(&keep_balanced);
+    /// let mut ctx = WatchContext::new();
+    /// ctx.set_frame_limit(Some(10));
+    /// ctx.add_watcher(&weak);
+    /// *keep_balanced.borrow_mut().left = 3;
+    /// ctx.update();
+    /// assert_eq!(keep_balanced.borrow().right, 3);
+    /// *keep_balanced.borrow_mut().right = 21;
+    /// ctx.update();
+    /// assert_eq!(keep_balanced.borrow().left, 21);
+    /// ```
     pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
         wrapper.inner.set_if_neq_auto(value);
     }

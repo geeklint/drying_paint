@@ -88,36 +88,35 @@ impl<'ctx, O> WatchContext<'ctx, O> {
     ///
     /// # Examples
     /// ```rust,should_panic
-    /// # use drying_paint::*;
+    ///# use std::{rc::Rc, cell::RefCell};
+    ///# use drying_paint::{Watcher, Watched, WatcherInit, WatchContext};
     /// #[derive(Default)]
     /// struct KeepBalanced {
     ///     left: Watched<i32>,
     ///     right: Watched<i32>,
     /// }
-    /// impl WatcherInit for KeepBalanced {
-    ///     fn init(watcher: &mut WatcherMeta<Self>) {
-    ///         watcher.watch(|root| {
+    ///
+    /// impl Watcher<'static> for KeepBalanced {
+    ///     fn init(mut init: impl WatcherInit<'static, Self>) {
+    ///         init.watch(|root| {
     ///             *root.left = *root.right;
     ///         });
-    ///         watcher.watch(|root| {
+    ///         init.watch(|root| {
     ///             *root.right = *root.left;
     ///         });
     ///     }
     /// }
-    /// fn main() {
-    ///     let mut ctx = WatchContext::new();
-    ///     ctx.set_frame_limit(Some(100));
-    ///     ctx = ctx.with(|| {
-    ///         let obj = WatchContext::allow_watcher_access((), |()| {
-    ///             let mut obj = Watcher::<KeepBalanced>::new();
-    ///             *obj.data_mut().left = 4;
-    ///             obj
-    ///         });
-    ///         // because we used set_frame_limit, this will panic after
-    ///         // 100 iterations.
-    ///         WatchContext::update_current();
-    ///     }).0;
-    /// }
+    ///
+    /// let keep_balanced = Rc::new(RefCell::new(KeepBalanced {
+    ///     left: Watched::new(7),
+    ///     right: Watched::new(7),
+    /// }));
+    /// let weak = Rc::downgrade(&keep_balanced);
+    /// let mut ctx = WatchContext::new();
+    /// ctx.set_frame_limit(Some(1000));
+    /// ctx.add_watcher(&weak);
+    /// ctx.update();
+    /// ```
     pub fn set_frame_limit(&mut self, value: Option<usize>) {
         self.frame_limit = value;
     }

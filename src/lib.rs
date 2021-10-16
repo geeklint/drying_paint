@@ -5,142 +5,50 @@
 //! This module provides a system to "watch" some values for changes and run
 //! code whenever they change.
 //!
-//! The typical usage is as follows: you first define a structure to hold
-//! data, including some "watched" data.
-//!
 //! ```rust
-//! # use drying_paint::*;
-//! # type Hello = Watcher<HelloData>;
-//! #[derive(Default)]
-//! struct HelloData {
-//!     name: Watched<String>,
-//!     greeting: String,
+//! use std::{rc::Rc, cell::RefCell};
+//! use drying_paint::{Watcher, Watched, WatcherInit, WatchContext};
+//! // define a type to hold data
+//! struct Content {
+//!     dest: i32,
+//!     source: Watched<i32>,
 //! }
-//! # impl WatcherInit for HelloData {
-//! #     fn init(watcher: &mut WatcherMeta<Self>) {
-//! #         watcher.watch(|root| {
-//! #             root.greeting = format!("Hello, {}!", root.name);
-//! #         });
-//! #     }
-//! # }
-//! # fn main() {
-//! #     let mut ctx = WatchContext::new();
-//! #     ctx = ctx.with(|| {
-//! #         let obj = WatchContext::allow_watcher_access((), |()| {
-//! #             let mut obj = Hello::new();
-//! #             *obj.data_mut().name = "Rust".to_string();
-//! #             obj
-//! #         });
-//! #         WatchContext::update_current();
-//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
-//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #         });
-//! #     }).0;
-//! # }
-//! ```
 //!
-//! Implementing the trait WatcherInit for that structure gives you an place
-//! to set-up the code that should run when a watched value changes.
-//!
-//! ```rust
-//! # use drying_paint::*;
-//! # type Hello = Watcher<HelloData>;
-//! # #[derive(Default)]
-//! # struct HelloData {
-//! #     name: Watched<String>,
-//! #     greeting: String,
-//! # }
-//! impl WatcherInit for HelloData {
-//!     fn init(watcher: &mut WatcherMeta<Self>) {
-//!         watcher.watch(|root| {
-//!             root.greeting = format!("Hello, {}!", root.name);
+//! // define Watcher trait for the type
+//! impl Watcher<'static> for Content {
+//!     fn init(mut init: impl WatcherInit<'static, Self>) {
+//!         // set up a callback that will be re-run when
+//!         // the Watched data changes
+//!         init.watch(|root| {
+//!             root.dest = *root.source;
 //!         });
 //!     }
 //! }
-//! # fn main() {
-//! #     let mut ctx = WatchContext::new();
-//! #     ctx = ctx.with(|| {
-//! #         let obj = WatchContext::allow_watcher_access((), |()| {
-//! #             let mut obj = Hello::new();
-//! #             *obj.data_mut().name = "Rust".to_string();
-//! #             obj
-//! #         });
-//! #         WatchContext::update_current();
-//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
-//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #         });
-//! #     }).0;
-//! # }
-//! ```
+//! // instantiate the content
+//! let content = Rc::new(RefCell::new(Content {
+//!     dest: 0,
+//!     source: Watched::new(37),
+//! }));
+//! let weak = Rc::downgrade(&content);
 //!
-//! Normally you need to wrap the data struct in a Watcher, so it's common
-//! to alias the watcher type to cleanup the syntax a bit:
-//! ```rust
-//! # use drying_paint::*;
-//! type Hello = Watcher<HelloData>;
-//! # #[derive(Default)]
-//! # struct HelloData {
-//! #     name: Watched<String>,
-//! #     greeting: String,
-//! # }
-//! # impl WatcherInit for HelloData {
-//! #     fn init(watcher: &mut WatcherMeta<Self>) {
-//! #         watcher.watch(|root| {
-//! #             root.greeting = format!("Hello, {}!", root.name);
-//! #         });
-//! #     }
-//! # }
-//! # fn main() {
-//! #     let mut ctx = WatchContext::new();
-//! #     ctx = ctx.with(|| {
-//! #         let obj = WatchContext::allow_watcher_access((), |()| {
-//! #             let mut obj = Hello::new();
-//! #             *obj.data_mut().name = "Rust".to_string();
-//! #             obj
-//! #         });
-//! #         WatchContext::update_current();
-//! #         let obj = WatchContext::allow_watcher_access(obj, |obj| {
-//! #             assert_eq!(obj.data().greeting, "Hello, Rust!");
-//! #         });
-//! #     }).0;
-//! # }
-//! ```
-//! Creating watchers and setting watched data needs to happen within a
-//! WatchContext. WatchContext::update_current() will cause all the pending
-//! watcher code to run.  WatchContext::allow_watcher_access() is used to
-//! create and access the Watcher,  This is required in order to comply with
-//! aliasing rules.
+//! // create the Context
+//! let mut ctx = WatchContext::new();
 //!
+//! // dest was 0 when instantiated
+//! assert_eq!(content.borrow().dest, 0);
 //!
-//! ```rust
-//! # use drying_paint::*;
-//! # type Hello = Watcher<HelloData>;
-//! # #[derive(Default)]
-//! # struct HelloData {
-//! #     name: Watched<String>,
-//! #     greeting: String,
-//! # }
-//! # impl WatcherInit for HelloData {
-//! #     fn init(watcher: &mut WatcherMeta<Self>) {
-//! #         watcher.watch(|root| {
-//! #             root.greeting = format!("Hello, {}!", root.name);
-//! #         });
-//! #     }
-//! # }
-//! fn main() {
-//!     let mut ctx = WatchContext::new();
-//!     ctx = ctx.with(|| {
-//!         let obj = WatchContext::allow_watcher_access((), |()| {
-//!             let mut obj = Hello::new();
-//!             *obj.data_mut().name = "Rust".to_string();
-//!             obj
-//!         });
-//!         WatchContext::update_current();
-//!         let obj = WatchContext::allow_watcher_access(obj, |obj| {
-//!             assert_eq!(obj.data().greeting, "Hello, Rust!");
-//!         });
-//!     }).0;
-//! }
+//! // after adding the watcher, the callback has run (once)
+//! ctx.add_watcher(&weak);
+//! assert_eq!(content.borrow().dest, 37);
+//!
+//! // we can change the "watched" value
+//! *content.borrow_mut().source = 43;
+//! assert_eq!(content.borrow().dest, 37);
+//!
+//! // and it will be updated when we call
+//! // update on the context
+//! ctx.update();
+//! assert_eq!(content.borrow().dest, 43);
 //! ```
 
 //#![warn(missing_docs)]
