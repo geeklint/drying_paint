@@ -168,31 +168,6 @@ impl<T: PartialEq> WatchedCore<'static, T, DefaultOwner> {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'ctx, T: serde::Serialize + ?Sized> serde::Serialize
-    for WatchedCore<T, Ctx<'ctx>>
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        T::serialize(&self.value, serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'ctx, 'de, T> serde::Deserialize<'de> for WatchedCore<T, Ctx<'ctx>>
-where
-    T: serde::Deserialize<'de> + ?Sized,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        T::deserialize(deserializer).map(Self::new)
-    }
-}
-
 /// A Watched value which provides interior mutability.  This provides correct
 /// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
 /// would not, and should be slightly more performant than

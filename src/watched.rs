@@ -122,29 +122,6 @@ impl<T: fmt::Debug + ?Sized> fmt::Debug for Watched<T> {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<T: serde::Serialize + ?Sized> serde::Serialize for Watched<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        T::serialize(&self.value, serializer)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl<'de, T> serde::Deserialize<'de> for Watched<T>
-where
-    T: serde::Deserialize<'de> + ?Sized,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        T::deserialize(deserializer).map(Self::new)
-    }
-}
-
 mod watched_ops {
     use std::cmp::Ordering;
     use std::ops::*;
