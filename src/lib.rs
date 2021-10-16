@@ -51,9 +51,12 @@
 //! assert_eq!(content.borrow().dest, 43);
 //! ```
 
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
 //#![warn(missing_docs)]
 #![deny(rust_2018_idioms)]
 #![allow(clippy::needless_doctest_main)]
+
+extern crate alloc;
 
 mod trigger;
 pub use trigger::WatchArg;
@@ -65,7 +68,9 @@ pub use context::{DefaultOwner, WatchContext};
 mod watched_core;
 pub use watched_core::{WatchedCellCore, WatchedCore, WatchedMeta};
 
+#[cfg(feature = "std")]
 mod watched;
+#[cfg(feature = "std")]
 pub use watched::{Watched, WatchedCell};
 
 mod watcher;

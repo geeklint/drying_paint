@@ -14,7 +14,8 @@ license = "Apache-2.0 OR MIT OR Zlib"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
+default = ["std"]
+std = []
 
 [dependencies]
 serde = { version = "1.0", optional = true }

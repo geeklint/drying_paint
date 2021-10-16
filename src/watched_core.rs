@@ -39,7 +39,8 @@ impl<'ctx, O: ?Sized> WatchedMeta<'ctx, O> {
     }
 }
 
-impl WatchedMeta<'static> {
+#[cfg(feature = "std")]
+impl WatchedMeta<'static, DefaultOwner> {
     pub fn watched_auto(&self) {
         WatchArg::try_with_current(|arg| self.watched(arg));
     }
@@ -120,6 +121,7 @@ impl<'ctx, T: ?Sized, O: ?Sized> WatchedCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
     pub fn get_auto(&self) -> &T {
         self.meta.watched_auto();
@@ -153,6 +155,7 @@ impl<'ctx, T: PartialEq, O: ?Sized> WatchedCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: PartialEq> WatchedCore<'static, T, DefaultOwner> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
@@ -228,6 +231,7 @@ impl<'ctx, T: ?Sized, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn get_mut_auto(&mut self) -> &mut T {
         self.meta.trigger_auto();
@@ -268,6 +272,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn set_auto(&self, value: T) {
         self.meta.trigger_auto();
@@ -293,6 +298,7 @@ impl<'ctx, T: Copy, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Copy> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn get_auto(&self) -> T {
         self.meta.watched_auto();
@@ -309,6 +315,7 @@ impl<'ctx, T: Default, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Default> WatchedCellCore<'static, T, DefaultOwner> {
     pub fn take_auto(&self) -> T {
         self.meta.trigger_auto();

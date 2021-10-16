@@ -1,8 +1,10 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use core::fmt;
-use core::ops::{Deref, DerefMut};
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 use crate::{DefaultOwner, WatchedCellCore, WatchedCore};
 
@@ -144,8 +146,8 @@ where
 }
 
 mod watched_ops {
-    use core::cmp::Ordering;
-    use core::ops::*;
+    use std::cmp::Ordering;
+    use std::ops::*;
 
     use super::Watched;
 

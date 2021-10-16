@@ -1,10 +1,13 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use core::{cell::Cell, mem};
-use std::rc::{Rc, Weak};
-
-use crate::DefaultOwner;
+use {
+    alloc::{
+        boxed::Box,
+        rc::{Rc, Weak},
+    },
+    core::{cell::Cell, mem},
+};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
@@ -24,40 +27,49 @@ impl<'a, 'ctx, O: ?Sized> Clone for WatchArg<'a, 'ctx, O> {
     }
 }
 
-struct OwnedWatchArg(
-    Watch<'static, DefaultOwner>,
-    Weak<WatchSet<'static, DefaultOwner>>,
-);
+#[cfg(feature = "std")]
+mod watcharg_current {
+    use crate::DefaultOwner;
 
-thread_local! {
-    static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = Cell::new(None);
-}
+    use super::*;
 
-impl<'a> WatchArg<'a, 'static, DefaultOwner> {
-    pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
-        CURRENT_ARG.with(|cell| {
-            let to_set =
-                OwnedWatchArg(self.watch.clone(), self.post_set.clone());
-            let prev = cell.replace(Some(to_set));
-            let ret = f();
-            cell.set(prev);
-            ret
-        })
+    struct OwnedWatchArg(
+        Watch<'static, DefaultOwner>,
+        Weak<WatchSet<'static, DefaultOwner>>,
+    );
+
+    thread_local! {
+        static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = Cell::new(None);
     }
 
-    pub fn try_with_current<F: FnOnce(WatchArg<'_, 'static, DefaultOwner>)>(
-        f: F,
-    ) -> Option<()> {
-        CURRENT_ARG.with(|cell| {
-            // TODO: re-entrence?
-            let owned = cell.take()?;
-            let ret = {
-                let OwnedWatchArg(ref watch, ref post_set) = owned;
-                f(WatchArg { watch, post_set })
-            };
-            cell.set(Some(owned));
-            Some(ret)
-        })
+    impl<'a> WatchArg<'a, 'static, DefaultOwner> {
+        pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
+            CURRENT_ARG.with(|cell| {
+                let to_set =
+                    OwnedWatchArg(self.watch.clone(), self.post_set.clone());
+                let prev = cell.replace(Some(to_set));
+                let ret = f();
+                cell.set(prev);
+                ret
+            })
+        }
+
+        pub fn try_with_current<
+            F: FnOnce(WatchArg<'_, 'static, DefaultOwner>),
+        >(
+            f: F,
+        ) -> Option<()> {
+            CURRENT_ARG.with(|cell| {
+                // TODO: re-entrence?
+                let owned = cell.take()?;
+                let ret = {
+                    let OwnedWatchArg(ref watch, ref post_set) = owned;
+                    f(WatchArg { watch, post_set })
+                };
+                cell.set(Some(owned));
+                Some(ret)
+            })
+        }
     }
 }
 

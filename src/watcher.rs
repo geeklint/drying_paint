@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use std::rc::Weak;
+use {alloc::rc::Weak, core::cell::RefCell};
 
 use crate::{DefaultOwner, Watch, WatchArg, WatchSet};
 
@@ -17,6 +17,7 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
+    #[cfg(feature = "std")]
     fn watch<F>(&mut self, func: F)
     where
         Self: WatcherInit<'static, T, DefaultOwner>,
@@ -46,7 +47,7 @@ pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
         F: FnOnce(&mut Self::Content);
 }
 
-impl<'ctx, T, O> WatcherHolder<'ctx, O> for Weak<core::cell::RefCell<T>>
+impl<'ctx, T, O> WatcherHolder<'ctx, O> for Weak<RefCell<T>>
 where
     T: ?Sized + Watcher<'ctx, O>,
     O: ?Sized,
@@ -129,6 +130,7 @@ where
         });
     }
 
+    #[cfg(feature = "std")]
     fn watch<F>(&mut self, func: F)
     where
         Self: WatcherInit<'static, Content, DefaultOwner>,

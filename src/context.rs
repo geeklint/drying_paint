@@ -2,8 +2,12 @@
 /* Copyright © 2021 Violet Leonard */
 
 use {
+    alloc::{
+        boxed::Box,
+        rc::{Rc, Weak},
+        vec::Vec,
+    },
     core::any::Any,
-    std::rc::{Rc, Weak},
 };
 
 use crate::{WatchSet, WatcherHolder};
