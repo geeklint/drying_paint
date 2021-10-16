@@ -161,7 +161,7 @@ mod watched;
 pub use watched::{Watched, WatchedCell};
 
 mod watcher;
-pub use watcher::{WatcherContent, WatcherHolder, WatcherInit};
+pub use watcher::{Watcher, WatcherHolder, WatcherInit};
 
 /*
 mod event;
@@ -187,7 +187,7 @@ mod tests {
             source: WatchedCore<'static, i32>,
         }
 
-        impl WatcherContent<'static> for Content {
+        impl Watcher<'static> for Content {
             fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch_explicit(|arg, root| {
                     root.dest = *root.source.get(arg);
@@ -219,7 +219,7 @@ mod tests {
             source: Watched<i32>,
         }
 
-        impl WatcherContent<'static> for Content {
+        impl Watcher<'static> for Content {
             fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = *root.source;
@@ -251,7 +251,7 @@ mod tests {
             value: Watched<i32>,
         }
 
-        impl WatcherContent<'static> for MutsTwice {
+        impl Watcher<'static> for MutsTwice {
             fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.value += 1;

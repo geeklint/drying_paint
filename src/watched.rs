@@ -378,7 +378,7 @@ mod tests {
             source: Watched<u32>,
         }
 
-        impl WatcherContent<'static> for Content {
+        impl Watcher<'static> for Content {
             fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = *root.source;
@@ -406,7 +406,7 @@ mod tests {
             source: Watched<u32>,
         }
 
-        impl WatcherContent<'static> for Content {
+        impl Watcher<'static> for Content {
             fn init(mut init: impl WatcherInit<'static, Self>) {
                 init.watch(|root| {
                     root.dest = &root.source ^ 0xffffffff;

@@ -5,7 +5,7 @@ use std::rc::Weak;
 
 use crate::{DefaultOwner, Watch, WatchArg, WatchSet};
 
-pub trait WatcherContent<'ctx, O: ?Sized = DefaultOwner> {
+pub trait Watcher<'ctx, O: ?Sized = DefaultOwner> {
     fn init(init: impl WatcherInit<'ctx, Self, O>);
 }
 
@@ -13,7 +13,7 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut T) -> &mut Ch,
-        Ch: WatcherContent<'ctx, O>;
+        Ch: Watcher<'ctx, O>;
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
@@ -39,7 +39,7 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
 }
 
 pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
-    type Content: ?Sized + WatcherContent<'ctx, O>;
+    type Content: ?Sized + Watcher<'ctx, O>;
 
     fn get_mut<F>(&self, owner: &mut O, f: F)
     where
@@ -48,7 +48,7 @@ pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
 
 impl<'ctx, T, O> WatcherHolder<'ctx, O> for Weak<core::cell::RefCell<T>>
 where
-    T: ?Sized + WatcherContent<'ctx, O>,
+    T: ?Sized + Watcher<'ctx, O>,
     O: ?Sized,
 {
     type Content = T;
@@ -89,7 +89,7 @@ impl<'ctx, Base, Map, Res: ?Sized, Owner: ?Sized> WatcherHolder<'ctx, Owner>
 where
     Base: WatcherHolder<'ctx, Owner>,
     Map: Clone + Fn(&mut Base::Content) -> &mut Res,
-    Res: WatcherContent<'ctx, Owner>,
+    Res: Watcher<'ctx, Owner>,
 {
     type Content = Res;
 
@@ -117,7 +117,7 @@ where
     fn init_child<F, Ch>(&mut self, func: F)
     where
         F: 'static + Clone + Fn(&mut Content) -> &mut Ch,
-        Ch: WatcherContent<'ctx, Owner>,
+        Ch: Watcher<'ctx, Owner>,
     {
         Ch::init(WatcherInitImpl {
             post_set: self.post_set,
