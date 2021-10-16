@@ -61,9 +61,9 @@ impl<'a> WatchArg<'a, 'static, DefaultOwner> {
     }
 }
 
-pub(crate) struct Watch<'ctx, O: ?Sized>(
-    Rc<WatchData<dyn 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>)>>,
-);
+type WatchFn<'ctx, O> = dyn 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>);
+
+pub(crate) struct Watch<'ctx, O: ?Sized>(Rc<WatchData<WatchFn<'ctx, O>>>);
 
 impl<'ctx, O: ?Sized> Clone for Watch<'ctx, O> {
     fn clone(&self) -> Self {
