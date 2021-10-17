@@ -16,6 +16,7 @@ pub struct WatchContext<'ctx, O = DefaultOwner> {
     next_frame: Rc<WatchSet<'ctx, O>>,
     next_frame_weak: Weak<WatchSet<'ctx, O>>,
     frame_limit: Option<usize>,
+    frame_id: u8,
     owner: O,
 }
 
@@ -33,6 +34,7 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
             next_frame,
             next_frame_weak,
             frame_limit,
+            frame_id: 0,
             owner: O::default(),
         }
     }
@@ -47,6 +49,7 @@ impl<'ctx, O> WatchContext<'ctx, O> {
             &self.next_frame_weak,
             holder,
             &mut self.owner,
+            self.frame_id.wrapping_sub(1),
         );
     }
 
@@ -73,14 +76,22 @@ impl<'ctx, O> WatchContext<'ctx, O> {
                         current_watch_names,
                     );
                 }
-                self.next_frame
-                    .execute(&mut self.owner, &self.next_frame_weak);
+                self.next_frame.execute(
+                    &mut self.owner,
+                    &self.next_frame_weak,
+                    self.frame_id,
+                );
+                self.frame_id = self.frame_id.wrapping_add(1);
                 frame_limit -= 1;
             }
         } else {
             while !self.next_frame.empty() {
-                self.next_frame
-                    .execute(&mut self.owner, &self.next_frame_weak);
+                self.next_frame.execute(
+                    &mut self.owner,
+                    &self.next_frame_weak,
+                    self.frame_id,
+                );
+                self.frame_id = self.frame_id.wrapping_add(1);
             }
         }
     }

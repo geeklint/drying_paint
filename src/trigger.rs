@@ -18,6 +18,7 @@ struct WatchData<F: ?Sized> {
 pub struct WatchArg<'a, 'ctx, O: ?Sized> {
     pub(crate) watch: &'a Watch<'ctx, O>,
     pub(crate) post_set: &'a Weak<WatchSet<'ctx, O>>,
+    pub(crate) frame_id: u8,
 }
 
 impl<'a, 'ctx, O: ?Sized> Copy for WatchArg<'a, 'ctx, O> {}
@@ -36,6 +37,7 @@ mod watcharg_current {
     struct OwnedWatchArg(
         Watch<'static, DefaultOwner>,
         Weak<WatchSet<'static, DefaultOwner>>,
+        u8,
     );
 
     thread_local! {
@@ -45,8 +47,11 @@ mod watcharg_current {
     impl<'a> WatchArg<'a, 'static, DefaultOwner> {
         pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
             CURRENT_ARG.with(|cell| {
-                let to_set =
-                    OwnedWatchArg(self.watch.clone(), self.post_set.clone());
+                let to_set = OwnedWatchArg(
+                    self.watch.clone(),
+                    self.post_set.clone(),
+                    self.frame_id,
+                );
                 let prev = cell.replace(Some(to_set));
                 let ret = f();
                 cell.set(prev);
@@ -63,8 +68,13 @@ mod watcharg_current {
                 // TODO: re-entrence?
                 let owned = cell.take()?;
                 let ret = {
-                    let OwnedWatchArg(ref watch, ref post_set) = owned;
-                    f(WatchArg { watch, post_set })
+                    let OwnedWatchArg(ref watch, ref post_set, frame_id) =
+                        owned;
+                    f(WatchArg {
+                        watch,
+                        post_set,
+                        frame_id,
+                    })
                 };
                 cell.set(Some(owned));
                 Some(ret)
@@ -87,6 +97,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
     pub(crate) fn spawn<F>(
         owner: &mut O,
         post_set: &Weak<WatchSet<'ctx, O>>,
+        frame_id: u8,
         func: F,
     ) where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
@@ -95,7 +106,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
             update_fn: func,
             cycle: Cell::new(0),
         }));
-        this.get_ref().execute(owner, post_set);
+        this.get_ref().execute(owner, post_set, frame_id);
     }
 
     pub(crate) fn get_ref(&self) -> WatchRef<'ctx, O> {
@@ -119,7 +130,12 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
         Rc::ptr_eq(&self.watch.0, &other.0)
     }
 
-    fn execute(self, owner: &mut O, post_set: &Weak<WatchSet<'ctx, O>>) {
+    fn execute(
+        self,
+        owner: &mut O,
+        post_set: &Weak<WatchSet<'ctx, O>>,
+        frame_id: u8,
+    ) {
         if self.cycle == self.watch.0.cycle.get() {
             self.watch.0.cycle.set(self.cycle + 1);
             (self.watch.0.update_fn)(
@@ -127,6 +143,7 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
                 WatchArg {
                     watch: &self.watch,
                     post_set,
+                    frame_id,
                 },
             );
         }
@@ -251,7 +268,12 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         }
     }
 
-    pub fn execute(&self, owner: &mut O, next_frame: &Weak<Self>) {
+    pub fn execute(
+        &self,
+        owner: &mut O,
+        next_frame: &Weak<Self>,
+        frame_id: u8,
+    ) {
         let mut node = if let Some(head) = self.list.take() {
             head.node
         } else {
@@ -260,7 +282,7 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         loop {
             for bucket in node.data.iter_mut() {
                 if let Some(watch) = bucket.take() {
-                    watch.execute(owner, next_frame);
+                    watch.execute(owner, next_frame, frame_id);
                 }
             }
             node = if let Some(next) = node.next {

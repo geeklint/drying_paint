@@ -76,10 +76,10 @@ pub use watched::{Watched, WatchedCell};
 mod watcher;
 pub use watcher::{Watcher, WatcherHolder, WatcherInit};
 
-/*
-mod event;
-pub use event::WatchedEvent;
+mod queue;
+pub use queue::WatchedQueue;
 
+/*
 mod channels;
 pub use channels::{
     watched_channel, AtomicWatchedMeta, AtomicWatchedMetaTrigger,
