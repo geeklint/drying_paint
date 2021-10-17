@@ -12,11 +12,24 @@ use {
 
 use crate::{WatchSet, WatcherHolder};
 
+pub(crate) struct FrameInfo<'ctx, O: ?Sized> {
+    pub(crate) id: u8,
+    pub(crate) post_set: Weak<WatchSet<'ctx, O>>,
+}
+
+impl<'ctx, O: ?Sized> Clone for FrameInfo<'ctx, O> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            post_set: self.post_set.clone(),
+        }
+    }
+}
+
 pub struct WatchContext<'ctx, O = DefaultOwner> {
     next_frame: Rc<WatchSet<'ctx, O>>,
-    next_frame_weak: Weak<WatchSet<'ctx, O>>,
+    frame_info: FrameInfo<'ctx, O>,
     frame_limit: Option<usize>,
-    frame_id: u8,
     owner: O,
 }
 
@@ -29,12 +42,14 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
             None
         };
         let next_frame = Rc::default();
-        let next_frame_weak = Rc::downgrade(&next_frame);
+        let frame_info = FrameInfo {
+            id: 0,
+            post_set: Rc::downgrade(&next_frame),
+        };
         WatchContext {
             next_frame,
-            next_frame_weak,
+            frame_info,
             frame_limit,
-            frame_id: 0,
             owner: O::default(),
         }
     }
@@ -46,10 +61,9 @@ impl<'ctx, O> WatchContext<'ctx, O> {
         T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
     {
         crate::watcher::init_watcher(
-            &self.next_frame_weak,
-            holder,
+            &self.frame_info,
             &mut self.owner,
-            self.frame_id.wrapping_sub(1),
+            holder,
         );
     }
 
@@ -76,22 +90,14 @@ impl<'ctx, O> WatchContext<'ctx, O> {
                         current_watch_names,
                     );
                 }
-                self.next_frame.execute(
-                    &mut self.owner,
-                    &self.next_frame_weak,
-                    self.frame_id,
-                );
-                self.frame_id = self.frame_id.wrapping_add(1);
+                self.next_frame.execute(&self.frame_info, &mut self.owner);
+                self.frame_info.id = self.frame_info.id.wrapping_add(1);
                 frame_limit -= 1;
             }
         } else {
             while !self.next_frame.empty() {
-                self.next_frame.execute(
-                    &mut self.owner,
-                    &self.next_frame_weak,
-                    self.frame_id,
-                );
-                self.frame_id = self.frame_id.wrapping_add(1);
+                self.next_frame.execute(&self.frame_info, &mut self.owner);
+                self.frame_info.id = self.frame_info.id.wrapping_add(1);
             }
         }
     }

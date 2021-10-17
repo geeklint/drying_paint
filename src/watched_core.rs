@@ -25,7 +25,8 @@ impl<'ctx, O: ?Sized> WatchedMeta<'ctx, O> {
     /// When run in a function designed to watch a value, will bind so that
     /// function will be re-run when this is triggered.
     pub fn watched(&self, ctx: WatchArg<'_, 'ctx, O>) {
-        self.watchers.add(ctx.watch.get_ref(), ctx.post_set);
+        self.watchers
+            .add(ctx.watch.get_ref(), &ctx.frame_info.post_set);
     }
 
     /// Mark this value as having changed, so that watching functions will

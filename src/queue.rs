@@ -43,10 +43,11 @@ impl<'ctx, T, O: ?Sized> WatchedQueue<'ctx, T, O> {
     ) {
         self.current_meta.watched(ctx);
         let mut current_data = self.current_data.take();
-        if current_data.is_none() || self.popped_frame_id.get() != ctx.frame_id
+        if current_data.is_none()
+            || self.popped_frame_id.get() != ctx.frame_info.id
         {
             current_data = self.pop_front();
-            self.popped_frame_id.set(ctx.frame_id);
+            self.popped_frame_id.set(ctx.frame_info.id);
             if current_data.is_some() {
                 self.current_meta.trigger_external();
             }

@@ -63,6 +63,7 @@ pub use trigger::WatchArg;
 use trigger::{Watch, WatchSet};
 
 mod context;
+use context::FrameInfo;
 pub use context::{DefaultOwner, WatchContext};
 
 mod watched_core;
