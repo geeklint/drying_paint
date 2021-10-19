@@ -3,7 +3,7 @@
 
 use {alloc::rc::Weak, core::cell::RefCell};
 
-use crate::{DefaultOwner, FrameInfo, Watch, WatchArg};
+use crate::{DefaultOwner, WatchArg, WatchContext};
 
 pub trait Watcher<'ctx, O: ?Sized = DefaultOwner> {
     fn init(init: impl WatcherInit<'ctx, Self, O>);
@@ -65,18 +65,13 @@ where
 }
 
 pub(crate) fn init_watcher<'ctx, T, O>(
-    frame_info: &FrameInfo<'ctx, O>,
-    owner: &mut O,
+    ctx: &mut WatchContext<'ctx, O>,
     holder: &T,
 ) where
     T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
     O: ?Sized,
 {
-    T::Content::init(WatcherInitImpl {
-        frame_info,
-        owner,
-        path: holder,
-    });
+    T::Content::init(WatcherInitImpl { ctx, path: holder });
 }
 
 #[derive(Clone)]
@@ -104,8 +99,7 @@ where
 }
 
 struct WatcherInitImpl<'a, 'ctx, Owner: ?Sized, Path> {
-    frame_info: &'a FrameInfo<'ctx, Owner>,
-    owner: &'a mut Owner,
+    ctx: &'a mut WatchContext<'ctx, Owner>,
     path: &'a Path,
 }
 
@@ -121,8 +115,7 @@ where
         Ch: Watcher<'ctx, Owner>,
     {
         Ch::init(WatcherInitImpl {
-            frame_info: self.frame_info,
-            owner: self.owner,
+            ctx: self.ctx,
             path: &MapWatcherHolder {
                 base: self.path.clone(),
                 map: func,
@@ -143,10 +136,10 @@ where
 
     fn watch_explicit<F>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content),
+        F: 'ctx + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content),
     {
         let current_path = self.path.clone();
-        Watch::spawn(self.frame_info, self.owner, move |owner, arg| {
+        self.ctx.add_watch(move |owner, arg| {
             current_path.get_mut(owner, |item| {
                 func(arg, item);
             });

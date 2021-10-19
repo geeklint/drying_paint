@@ -10,7 +10,7 @@ use {
     core::any::Any,
 };
 
-use crate::{WatchSet, WatcherHolder};
+use crate::{Watch, WatchArg, WatchSet, WatcherHolder};
 
 pub(crate) struct FrameInfo<'ctx, O: ?Sized> {
     pub(crate) id: u8,
@@ -26,11 +26,11 @@ impl<'ctx, O: ?Sized> Clone for FrameInfo<'ctx, O> {
     }
 }
 
-pub struct WatchContext<'ctx, O = DefaultOwner> {
+pub struct WatchContext<'ctx, O: ?Sized = DefaultOwner> {
     next_frame: Rc<WatchSet<'ctx, O>>,
-    frame_info: FrameInfo<'ctx, O>,
+    pub(crate) frame_info: FrameInfo<'ctx, O>,
     frame_limit: Option<usize>,
-    owner: O,
+    pub(crate) owner: O,
 }
 
 impl<'ctx, O: Default> WatchContext<'ctx, O> {
@@ -55,16 +55,19 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
     }
 }
 
-impl<'ctx, O> WatchContext<'ctx, O> {
+impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
+    pub fn add_watch<F>(&mut self, f: F)
+    where
+        F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
+    {
+        Watch::spawn(&self.frame_info, &mut self.owner, f);
+    }
+
     pub fn add_watcher<T>(&mut self, holder: &T)
     where
         T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
     {
-        crate::watcher::init_watcher(
-            &self.frame_info,
-            &mut self.owner,
-            holder,
-        );
+        crate::watcher::init_watcher(self, holder);
     }
 
     pub fn owner(&mut self) -> &mut O {
