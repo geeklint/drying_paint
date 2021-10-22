@@ -9,9 +9,16 @@ use crate::{DefaultOwner, WatchArg, WatchSet};
 /// it to provide functionality using the watch system for cases where
 /// [Watched](struct.Watched.html) and
 /// [WatchedEvent](struct.WatchedEvent.html) are not appropriate.
-#[derive(Default)]
 pub struct WatchedMeta<'ctx, O: ?Sized = DefaultOwner> {
     watchers: WatchSet<'ctx, O>,
+}
+
+impl<'ctx, O: ?Sized> Default for WatchedMeta<'ctx, O> {
+    fn default() -> Self {
+        Self {
+            watchers: WatchSet::default(),
+        }
+    }
 }
 
 impl<'ctx, O: ?Sized> WatchedMeta<'ctx, O> {

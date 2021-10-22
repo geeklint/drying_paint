@@ -10,24 +10,27 @@ use {
     core::any::Any,
 };
 
-use crate::{Watch, WatchArg, WatchSet, WatcherHolder};
+use crate::{sync::SyncContext, Watch, WatchArg, WatchSet, WatcherHolder};
 
 pub(crate) struct FrameInfo<'ctx, O: ?Sized> {
     pub(crate) id: u8,
     pub(crate) post_set: Weak<WatchSet<'ctx, O>>,
+    pub(crate) sync_context: Weak<SyncContext<'ctx, O>>,
 }
 
 impl<'ctx, O: ?Sized> Clone for FrameInfo<'ctx, O> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
-            post_set: self.post_set.clone(),
+            post_set: Weak::clone(&self.post_set),
+            sync_context: Weak::clone(&self.sync_context),
         }
     }
 }
 
 pub struct WatchContext<'ctx, O: ?Sized = DefaultOwner> {
     next_frame: Rc<WatchSet<'ctx, O>>,
+    sync_context: Rc<SyncContext<'ctx, O>>,
     pub(crate) frame_info: FrameInfo<'ctx, O>,
     frame_limit: Option<usize>,
     pub(crate) owner: O,
@@ -42,12 +45,15 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
             None
         };
         let next_frame = Rc::default();
+        let sync_context = Rc::new(SyncContext::new());
         let frame_info = FrameInfo {
             id: 0,
             post_set: Rc::downgrade(&next_frame),
+            sync_context: Rc::downgrade(&sync_context),
         };
         WatchContext {
             next_frame,
+            sync_context,
             frame_info,
             frame_limit,
             owner: O::default(),
@@ -75,7 +81,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
     }
 
     pub fn update(&mut self) {
-        //self.chan_ctx.check_for_activity();
+        self.sync_context.check_for_updates();
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.next_frame.empty() {
                 if frame_limit == 0 {

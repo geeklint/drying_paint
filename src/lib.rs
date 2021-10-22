@@ -80,13 +80,8 @@ pub use watcher::{Watcher, WatcherHolder, WatcherInit};
 mod queue;
 pub use queue::WatchedQueue;
 
-/*
-mod channels;
-pub use channels::{
-    watched_channel, AtomicWatchedMeta, AtomicWatchedMetaTrigger,
-    WatchedReceiver, WatchedSender,
-};
-*/
+mod sync;
+pub use sync::{SyncTrigger, SyncWatchedMeta};
 
 #[cfg(test)]
 mod tests {
