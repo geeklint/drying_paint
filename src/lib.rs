@@ -81,7 +81,10 @@ mod queue;
 pub use queue::WatchedQueue;
 
 mod sync;
-pub use sync::{SyncTrigger, SyncWatchedMeta};
+pub use sync::{
+    watched_channel, SendGuard, SyncTrigger, SyncWatchedMeta, WatchedReceiver,
+    WatchedSender,
+};
 
 #[cfg(test)]
 mod tests {
@@ -183,5 +186,41 @@ mod tests {
         *content.borrow_mut().value = 41;
         ctx.update();
         assert_eq!(*content.borrow().value, 43);
+    }
+
+    #[test]
+    fn send_received_by_watch() {
+        use std::sync::mpsc::{channel, Receiver};
+
+        struct Content {
+            dest: Option<i32>,
+            source: WatchedReceiver<Receiver<i32>>,
+        }
+
+        impl Watcher<'static> for Content {
+            fn init(mut init: impl WatcherInit<'static, Self>) {
+                init.watch_explicit(|arg, root| {
+                    root.dest = root.source.get(arg).try_recv().ok();
+                });
+            }
+        }
+
+        let (sender, receiver) = watched_channel(channel());
+
+        let content = Rc::new(RefCell::new(Content {
+            dest: None,
+            source: receiver,
+        }));
+        let weak = Rc::downgrade(&content);
+
+        let mut ctx = WatchContext::new();
+        ctx.add_watcher(&weak);
+        assert_eq!(content.borrow().dest, None);
+        let thread_handle = std::thread::spawn(move || {
+            sender.sender().send(4812).unwrap();
+        });
+        thread_handle.join().unwrap();
+        ctx.update();
+        assert_eq!(content.borrow().dest, Some(4812));
     }
 }

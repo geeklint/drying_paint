@@ -5,6 +5,7 @@ use {
     alloc::sync::{Arc, Weak},
     core::{
         cell::Cell,
+        fmt,
         mem::{self, size_of},
         ptr,
         sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
@@ -125,6 +126,12 @@ impl Default for SyncWatchedMeta {
     }
 }
 
+impl fmt::Debug for SyncWatchedMeta {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(SyncWatchedMeta)")
+    }
+}
+
 impl SyncWatchedMeta {
     /// Create a new AtomicWatchedMeta
     pub fn new() -> Self {
@@ -136,7 +143,7 @@ impl SyncWatchedMeta {
     /// AtomicWatchedMeta is invoked.
     pub fn watched<'ctx, O: ?Sized>(&self, ctx: WatchArg<'_, 'ctx, O>) {
         if let Some(sctx) = ctx.frame_info.sync_context.upgrade() {
-            if !self.index.get() == usize::MAX {
+            if self.index.get() == usize::MAX {
                 let index = sctx.next_index.get();
                 sctx.next_index.set(index + 1 % FLAG_COUNT);
                 let mask = 1 << index;
@@ -165,6 +172,12 @@ pub struct SyncTrigger {
     data: Weak<SharedMeta>,
 }
 
+impl fmt::Debug for SyncTrigger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(SyncTrigger)")
+    }
+}
+
 impl SyncTrigger {
     /// Create an SyncTrigger which is not assocaited with any
     /// SyncWatchedMeta.  Invoking the trigger returned from this function
@@ -183,64 +196,75 @@ impl SyncTrigger {
     }
 }
 
-/*
-pub fn watched_channel<T>() -> (WatchedSender<T>, WatchedReceiver<T>) {
-    let meta = AtomicWatchedMeta::new();
-    let (sender, receiver) = mpsc::channel::<T>();
+pub fn watched_channel<S, R>(
+    pair: (S, R),
+) -> (WatchedSender<S>, WatchedReceiver<R>) {
+    let (sender, receiver) = pair;
+    let meta = SyncWatchedMeta::new();
+    let trigger = meta.create_trigger();
     (
-        WatchedSender {
-            inner: sender,
-            trigger: meta.create_trigger(),
-        },
-        WatchedReceiver {
-            inner: receiver,
-            meta,
-        },
+        WatchedSender { sender, trigger },
+        WatchedReceiver { receiver, meta },
     )
 }
 
 /// The sender half of a watched channel.
 #[derive(Clone, Debug)]
-pub struct WatchedSender<T> {}
+pub struct WatchedSender<S: ?Sized> {
+    trigger: SyncTrigger,
+    sender: S,
+}
 
-impl<T> Drop for WatchedSender<T> {
+impl<S: ?Sized> Drop for WatchedSender<S> {
     fn drop(&mut self) {
         self.trigger.trigger();
     }
 }
 
-/// The receiver half of a watched channel.
-///
-/// The methods exposed on this type corospond to the non-blocking methods
-/// on the
-/// [std channel Receiver](https://doc.rust-lang.org/std/sync/mpsc/struct.Receiver.html),
-/// but they also bind watch closures, so that when new data is sent those
-/// closures will be re-run.
+impl<S: ?Sized> WatchedSender<S> {
+    pub fn sender(&self) -> SendGuard<'_, S> {
+        SendGuard { origin: self }
+    }
+
+    pub fn trigger_receiver(&self) {
+        self.trigger.trigger();
+    }
+}
+
+pub struct SendGuard<'a, S: ?Sized> {
+    origin: &'a WatchedSender<S>,
+}
+
+impl<'a, S: ?Sized> core::ops::Deref for SendGuard<'a, S> {
+    type Target = S;
+    fn deref(&self) -> &S {
+        &self.origin.sender
+    }
+}
+
+impl<'a, S: ?Sized> Drop for SendGuard<'a, S> {
+    fn drop(&mut self) {
+        self.origin.trigger.trigger();
+    }
+}
+
 #[derive(Debug)]
-pub struct WatchedReceiver<T> {
-    inner: mpsc::Receiver<T>,
-    meta: AtomicWatchedMeta,
+pub struct WatchedReceiver<R: ?Sized> {
+    meta: SyncWatchedMeta,
+    receiver: R,
 }
 
-impl<T> WatchedReceiver<T> {
-    /// Attempts to return a pending value on this receiver.
-    ///
-    /// This corosponds to the `try_recv` method on the std Receiver, but
-    /// additionally binds enclosing watch closures, so that they will be
-    /// re-run when new data might be available.
-    pub fn recv(&self) -> Result<T, mpsc::TryRecvError> {
-        self.meta.watched();
-        self.inner.try_recv()
+impl<R: ?Sized> WatchedReceiver<R> {
+    pub fn get<'ctx, O: ?Sized>(&self, ctx: WatchArg<'_, 'ctx, O>) -> &R {
+        self.meta.watched(ctx);
+        &self.receiver
     }
 
-    /// Returns an iterator that will attempt to yield all pending values.
-    ///
-    /// This corosponds to the `try_iter` method on the std Receiver, but
-    /// additionally binds enclosing watch closures, so that they will be
-    /// re-run when new data might be available.
-    pub fn iter(&self) -> mpsc::TryIter<T> {
-        self.meta.watched();
-        self.inner.try_iter()
+    pub fn get_mut<'ctx, O: ?Sized>(
+        &mut self,
+        ctx: WatchArg<'_, 'ctx, O>,
+    ) -> &mut R {
+        self.meta.watched(ctx);
+        &mut self.receiver
     }
 }
-*/
