@@ -9,7 +9,7 @@ use {
     core::{cell::Cell, mem},
 };
 
-use crate::{FrameInfo, WatchContext};
+use crate::{FrameInfo, WatchContext, WatcherHolder};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
@@ -97,6 +97,32 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
                     owner, frame_info, ..
                 } = ctx;
                 func(owner, WatchArg { watch, frame_info });
+            }
+        };
+        let this = Watch(Rc::new(WatchData {
+            update_fn,
+            cycle: Cell::new(0),
+        }));
+        this.get_ref().execute(ctx);
+    }
+
+    pub(crate) fn spawn_might_add_watcher<F, T>(
+        ctx: &mut WatchContext<'ctx, O>,
+        func: F,
+    ) where
+        F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
+        T: 'ctx + WatcherHolder<'ctx, O>,
+    {
+        let update_fn = {
+            move |ctx: &mut WatchContext<'ctx, O>, watch: &Self| {
+                let WatchContext {
+                    owner, frame_info, ..
+                } = ctx;
+                if let Some(watcher) =
+                    func(owner, WatchArg { watch, frame_info })
+                {
+                    ctx.add_watcher(&watcher);
+                }
             }
         };
         let this = Watch(Rc::new(WatchData {
