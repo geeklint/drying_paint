@@ -75,7 +75,8 @@ mod watcharg_current {
     }
 }
 
-type WatchFn<'ctx, O> = dyn 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>);
+type WatchFn<'ctx, O> =
+    dyn 'ctx + Fn(&mut WatchContext<'ctx, O>, &Watch<'ctx, O>);
 
 pub(crate) struct Watch<'ctx, O: ?Sized>(Rc<WatchData<WatchFn<'ctx, O>>>);
 
@@ -90,8 +91,16 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
+        let update_fn = {
+            move |ctx: &mut WatchContext<'ctx, O>, watch: &Self| {
+                let WatchContext {
+                    owner, frame_info, ..
+                } = ctx;
+                func(owner, WatchArg { watch, frame_info });
+            }
+        };
         let this = Watch(Rc::new(WatchData {
-            update_fn: func,
+            update_fn,
             cycle: Cell::new(0),
         }));
         this.get_ref().execute(ctx);
@@ -121,18 +130,7 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
     fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
         if self.cycle == self.watch.0.cycle.get() {
             self.watch.0.cycle.set(self.cycle + 1);
-            let WatchContext {
-                ref mut owner,
-                ref frame_info,
-                ..
-            } = ctx;
-            (self.watch.0.update_fn)(
-                owner,
-                WatchArg {
-                    watch: &self.watch,
-                    frame_info,
-                },
-            );
+            (self.watch.0.update_fn)(ctx, &self.watch);
         }
     }
 }
