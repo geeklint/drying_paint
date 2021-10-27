@@ -66,7 +66,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
-        Watch::spawn(&self.frame_info, &mut self.owner, f);
+        Watch::spawn(self, f);
     }
 
     pub fn add_watcher<T>(&mut self, holder: &T)
@@ -99,13 +99,13 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
                         current_watch_names,
                     );
                 }
-                self.next_frame.execute(&self.frame_info, &mut self.owner);
+                self.next_frame.take().execute(self);
                 self.frame_info.id = self.frame_info.id.wrapping_add(1);
                 frame_limit -= 1;
             }
         } else {
             while !self.next_frame.empty() {
-                self.next_frame.execute(&self.frame_info, &mut self.owner);
+                self.next_frame.take().execute(self);
                 self.frame_info.id = self.frame_info.id.wrapping_add(1);
             }
         }

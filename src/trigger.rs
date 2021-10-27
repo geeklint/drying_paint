@@ -9,7 +9,7 @@ use {
     core::{cell::Cell, mem},
 };
 
-use crate::FrameInfo;
+use crate::{FrameInfo, WatchContext};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
@@ -86,7 +86,7 @@ impl<'ctx, O: ?Sized> Clone for Watch<'ctx, O> {
 }
 
 impl<'ctx, O: ?Sized> Watch<'ctx, O> {
-    pub(crate) fn spawn<F>(info: &FrameInfo<'ctx, O>, owner: &mut O, func: F)
+    pub(crate) fn spawn<F>(ctx: &mut WatchContext<'ctx, O>, func: F)
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
@@ -94,7 +94,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
             update_fn: func,
             cycle: Cell::new(0),
         }));
-        this.get_ref().execute(info, owner);
+        this.get_ref().execute(ctx);
     }
 
     pub(crate) fn get_ref(&self) -> WatchRef<'ctx, O> {
@@ -118,9 +118,14 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
         Rc::ptr_eq(&self.watch.0, &other.0)
     }
 
-    fn execute(self, frame_info: &FrameInfo<'ctx, O>, owner: &mut O) {
+    fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
         if self.cycle == self.watch.0.cycle.get() {
             self.watch.0.cycle.set(self.cycle + 1);
+            let WatchContext {
+                ref mut owner,
+                ref frame_info,
+                ..
+            } = ctx;
             (self.watch.0.update_fn)(
                 owner,
                 WatchArg {
@@ -250,7 +255,13 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         }
     }
 
-    pub fn execute(&self, frame_info: &FrameInfo<'ctx, O>, owner: &mut O) {
+    pub fn take(&self) -> Self {
+        Self {
+            list: Cell::new(self.list.take()),
+        }
+    }
+
+    pub fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
         let mut node = if let Some(head) = self.list.take() {
             head.node
         } else {
@@ -259,7 +270,7 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         loop {
             for bucket in node.data.iter_mut() {
                 if let Some(watch) = bucket.take() {
-                    watch.execute(frame_info, owner);
+                    watch.execute(ctx);
                 }
             }
             node = if let Some(next) = node.next {
