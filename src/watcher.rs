@@ -23,16 +23,23 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
         Self: WatcherInit<'static, T, DefaultOwner>,
         F: 'static + Fn(&mut T);
 
+    #[cfg(feature = "std")]
+    fn watch_for_new_child<F, W>(&mut self, func: F)
+    where
+        Self: WatcherInit<'static, T, DefaultOwner>,
+        F: 'static + Fn(&mut T) -> Option<W>,
+        W: 'static + WatcherHolder<'static, DefaultOwner>;
+
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
     fn watch_explicit<F>(&mut self, func: F)
     where
         F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T);
 
-    fn watch_for_new_child_explicit<F, N>(&mut self, func: F)
+    fn watch_for_new_child_explicit<F, W>(&mut self, func: F)
     where
-        F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T) -> Option<N>,
-        N: 'ctx + WatcherHolder<'ctx, O>;
+        F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T) -> Option<W>,
+        W: 'ctx + WatcherHolder<'ctx, O>;
 
     /*
         /// Watches have a debug name used in some error messages.  It defaults to
@@ -134,6 +141,18 @@ where
     {
         self.watch_explicit(move |arg, content| {
             arg.use_as_current(|| func(content));
+        });
+    }
+
+    #[cfg(feature = "std")]
+    fn watch_for_new_child<F, T>(&mut self, func: F)
+    where
+        Self: WatcherInit<'static, Content, DefaultOwner>,
+        F: 'static + Fn(&mut Content) -> Option<T>,
+        T: 'static + WatcherHolder<'static, DefaultOwner>,
+    {
+        self.watch_for_new_child_explicit(move |arg, content| {
+            arg.use_as_current(|| func(content))
         });
     }
 
