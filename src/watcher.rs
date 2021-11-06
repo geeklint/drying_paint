@@ -29,6 +29,11 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
     where
         F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T);
 
+    fn watch_for_new_child_explicit<F, N>(&mut self, func: F)
+    where
+        F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T) -> Option<N>,
+        N: 'ctx + WatcherHolder<'ctx, O>;
+
     /*
         /// Watches have a debug name used in some error messages.  It defaults to
         /// the type name of the associated content (T).  This function allows
@@ -42,9 +47,9 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
 pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
     type Content: ?Sized + Watcher<'ctx, O>;
 
-    fn get_mut<F>(&self, owner: &mut O, f: F)
+    fn get_mut<F, R>(&self, owner: &mut O, f: F) -> Option<R>
     where
-        F: FnOnce(&mut Self::Content);
+        F: FnOnce(&mut Self::Content) -> R;
 }
 
 impl<'ctx, T, O> WatcherHolder<'ctx, O> for Weak<RefCell<T>>
@@ -54,13 +59,11 @@ where
 {
     type Content = T;
 
-    fn get_mut<F>(&self, _owner: &mut O, f: F)
+    fn get_mut<F, R>(&self, _owner: &mut O, f: F) -> Option<R>
     where
-        F: FnOnce(&mut Self::Content),
+        F: FnOnce(&mut Self::Content) -> R,
     {
-        if let Some(strong) = self.upgrade() {
-            f(&mut *strong.borrow_mut());
-        }
+        self.upgrade().map(|strong| f(&mut *strong.borrow_mut()))
     }
 }
 
@@ -89,12 +92,12 @@ where
 {
     type Content = Res;
 
-    fn get_mut<F>(&self, owner: &mut Owner, f: F)
+    fn get_mut<F, R>(&self, owner: &mut Owner, f: F) -> Option<R>
     where
-        F: FnOnce(&mut Self::Content),
+        F: FnOnce(&mut Self::Content) -> R,
     {
         let map = &self.map;
-        self.base.get_mut(owner, |item| f(map(item)));
+        self.base.get_mut(owner, |item| f(map(item)))
     }
 }
 
@@ -143,6 +146,19 @@ where
             current_path.get_mut(owner, |item| {
                 func(arg, item);
             });
+        });
+    }
+
+    fn watch_for_new_child_explicit<F, T>(&mut self, func: F)
+    where
+        F: 'static + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content) -> Option<T>,
+        T: 'ctx + WatcherHolder<'ctx, Owner>,
+    {
+        let current_path = self.path.clone();
+        self.ctx.add_watch_might_add_watcher(move |owner, arg| {
+            current_path
+                .get_mut(owner, |item| func(arg, item))
+                .flatten()
         });
     }
 }
