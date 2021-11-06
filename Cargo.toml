@@ -18,3 +18,4 @@ default = ["std"]
 std = []
 
 [dependencies]
+qcell = { version = "0.4.3", optional = true }

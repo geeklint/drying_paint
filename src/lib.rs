@@ -223,4 +223,41 @@ mod tests {
         ctx.update();
         assert_eq!(content.borrow().dest, Some(4812));
     }
+
+    #[cfg(feature = "qcell")]
+    #[test]
+    fn simple_propogate_lcell() {
+        use qcell::{LCell, LCellOwner};
+
+        struct Content<'ctx> {
+            dest: i32,
+            source: WatchedCore<'ctx, i32, LCellOwner<'ctx>>,
+        }
+
+        impl<'ctx> Watcher<'ctx, LCellOwner<'ctx>> for Content<'ctx> {
+            fn init(mut init: impl WatcherInit<'ctx, Self, LCellOwner<'ctx>>) {
+                init.watch_explicit(|arg, root| {
+                    root.dest = *root.source.get(arg);
+                });
+            }
+        }
+        LCellOwner::scope(|owner| {
+            let content = Rc::new(LCell::new(Content {
+                dest: 0,
+                source: WatchedCore::new(37),
+            }));
+            let weak = Rc::downgrade(&content);
+
+            let mut ctx = WatchContext::from_owner(owner);
+            assert_eq!(content.ro(ctx.owner()).dest, 0);
+            ctx.add_watcher(&weak);
+            assert_eq!(content.ro(ctx.owner()).dest, 37);
+            *content.rw(ctx.owner()).source.get_mut_external() = 43;
+            assert_eq!(content.ro(ctx.owner()).dest, 37);
+            ctx.update();
+            assert_eq!(content.ro(ctx.owner()).dest, 43);
+            ctx.update();
+            assert_eq!(content.ro(ctx.owner()).dest, 43);
+        });
+    }
 }

@@ -74,6 +74,26 @@ where
     }
 }
 
+#[cfg(feature = "qcell")]
+impl<'ctx, T> WatcherHolder<'ctx, qcell::LCellOwner<'ctx>>
+    for Weak<qcell::LCell<'ctx, T>>
+where
+    T: ?Sized + Watcher<'ctx, qcell::LCellOwner<'ctx>>,
+{
+    type Content = T;
+
+    fn get_mut<F, R>(
+        &self,
+        owner: &mut qcell::LCellOwner<'ctx>,
+        f: F,
+    ) -> Option<R>
+    where
+        F: FnOnce(&mut Self::Content) -> R,
+    {
+        self.upgrade().map(|strong| f(strong.rw(owner)))
+    }
+}
+
 pub(crate) fn init_watcher<'ctx, T, O>(
     ctx: &mut WatchContext<'ctx, O>,
     holder: &T,
