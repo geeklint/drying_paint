@@ -36,9 +36,8 @@ pub struct WatchContext<'ctx, O: ?Sized = DefaultOwner> {
     pub(crate) owner: O,
 }
 
-impl<'ctx, O: Default> WatchContext<'ctx, O> {
-    /// Create a new WatchContext
-    pub fn new() -> Self {
+impl<'ctx, O> WatchContext<'ctx, O> {
+    pub fn from_owner(owner: O) -> Self {
         let frame_limit = if cfg!(debug_assertions) {
             Some(1024)
         } else {
@@ -56,8 +55,15 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
             sync_context,
             frame_info,
             frame_limit,
-            owner: O::default(),
+            owner,
         }
+    }
+}
+
+impl<'ctx, O: Default> WatchContext<'ctx, O> {
+    /// Create a new WatchContext
+    pub fn new() -> Self {
+        Self::from_owner(O::default())
     }
 }
 
