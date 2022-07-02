@@ -13,8 +13,8 @@ use crate::{FrameInfo, WatchContext, WatcherHolder};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
+    debug_name: &'static str,
     update_fn: F,
-    //debug_name: &'static str,
 }
 
 pub struct WatchArg<'a, 'ctx, O: ?Sized> {
@@ -87,8 +87,11 @@ impl<'ctx, O: ?Sized> Clone for Watch<'ctx, O> {
 }
 
 impl<'ctx, O: ?Sized> Watch<'ctx, O> {
-    pub(crate) fn spawn<F>(ctx: &mut WatchContext<'ctx, O>, func: F)
-    where
+    pub(crate) fn spawn<F>(
+        ctx: &mut WatchContext<'ctx, O>,
+        debug_name: &'static str,
+        func: F,
+    ) where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
         let update_fn = {
@@ -101,6 +104,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
         };
         let this = Watch(Rc::new(WatchData {
             update_fn,
+            debug_name,
             cycle: Cell::new(0),
         }));
         this.get_ref().execute(ctx);
@@ -108,6 +112,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
 
     pub(crate) fn spawn_might_add_watcher<F, T>(
         ctx: &mut WatchContext<'ctx, O>,
+        debug_name: &'static str,
         func: F,
     ) where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
@@ -128,6 +133,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
         };
         let this = Watch(Rc::new(WatchData {
             update_fn,
+            debug_name,
             cycle: Cell::new(0),
         }));
         this.get_ref().execute(ctx);
@@ -137,7 +143,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
         WatchRef {
             watch: self.clone(),
             cycle: self.0.cycle.get(),
-            //debug_name: self.0.debug_name,
+            debug_name: self.0.debug_name,
         }
     }
 }
@@ -146,7 +152,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
 pub(crate) struct WatchRef<'ctx, O: ?Sized> {
     watch: Watch<'ctx, O>,
     cycle: usize,
-    //debug_name: &'static str,
+    debug_name: &'static str,
 }
 
 impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
@@ -306,18 +312,23 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         }
     }
 
-    /*
-    pub fn debug_names(&self) -> String {
-        self.with(|mut list| {
-            let mut names = Vec::new();
-            while let Some(node) = list {
-                names.extend(node.data.iter().filter_map(|bucket| {
-                    bucket.as_ref().map(|watch| watch.debug_name)
-                }));
-                list = &mut node.next;
+    pub fn debug_names(&self) -> alloc::string::String {
+        self.with(|list| {
+            let mut names = alloc::vec::Vec::new();
+            if let Some(head) = &list {
+                let mut node = &head.node;
+                loop {
+                    names.extend(node.data.iter().filter_map(|bucket| {
+                        bucket.as_ref().map(|watch| watch.debug_name)
+                    }));
+                    node = if let Some(next) = &node.next {
+                        next
+                    } else {
+                        break;
+                    };
+                }
             }
             names.join("\n  ")
         })
     }
-    */
 }

@@ -86,7 +86,7 @@ pub use sync::{
     WatchedSender,
 };
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
 

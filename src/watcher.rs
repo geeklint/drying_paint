@@ -7,6 +7,10 @@ use crate::{DefaultOwner, WatchArg, WatchContext};
 
 pub trait Watcher<'ctx, O: ?Sized = DefaultOwner> {
     fn init(init: impl WatcherInit<'ctx, Self, O>);
+
+    fn debug_name() -> &'static str {
+        core::any::type_name::<Self>()
+    }
 }
 
 pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
@@ -42,15 +46,6 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
         F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T) -> Option<W>,
         W: 'ctx + WatcherHolder<'ctx, O>,
         W::Content: Watcher<'ctx, O>;
-
-    /*
-        /// Watches have a debug name used in some error messages.  It defaults to
-        /// the type name of the associated content (T).  This function allows
-        /// overriding that name.
-        pub fn set_debug_name(&mut self, debug_name: &'static str) {
-            self.debug_name = debug_name;
-        }
-    */
 }
 
 pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
@@ -120,6 +115,7 @@ impl<'a, 'ctx, Owner: ?Sized, Path, Content: ?Sized>
     for WatcherInitImpl<'a, 'ctx, Owner, Path>
 where
     Path: 'ctx + WatcherHolder<'ctx, Owner, Content = Content>,
+    Content: Watcher<'ctx, Owner>,
 {
     fn init_child<F, Ch>(&mut self, func: F)
     where
@@ -164,6 +160,7 @@ where
         F: 'ctx + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content),
     {
         let current_path = self.path.clone();
+        self.ctx.next_debug_name = Content::debug_name();
         self.ctx.add_watch(move |owner, arg| {
             current_path.get_mut(owner, |item| {
                 func(arg, item);
@@ -178,6 +175,7 @@ where
         T::Content: Watcher<'ctx, Owner>,
     {
         let current_path = self.path.clone();
+        self.ctx.next_debug_name = Content::debug_name();
         self.ctx.add_watch_might_add_watcher(move |owner, arg| {
             current_path
                 .get_mut(owner, |item| func(arg, item))

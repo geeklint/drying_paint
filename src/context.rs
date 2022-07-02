@@ -33,6 +33,7 @@ pub struct WatchContext<'ctx, O: ?Sized = DefaultOwner> {
     sync_context: Rc<SyncContext<'ctx, O>>,
     pub(crate) frame_info: FrameInfo<'ctx, O>,
     frame_limit: Option<usize>,
+    pub(crate) next_debug_name: &'static str,
     pub(crate) owner: O,
 }
 
@@ -50,11 +51,13 @@ impl<'ctx, O> WatchContext<'ctx, O> {
             post_set: Rc::downgrade(&next_frame),
             sync_context: Rc::downgrade(&sync_context),
         };
+        let next_debug_name = "<unknown>";
         WatchContext {
             next_frame,
             sync_context,
             frame_info,
             frame_limit,
+            next_debug_name,
             owner,
         }
     }
@@ -68,11 +71,16 @@ impl<'ctx, O: Default> WatchContext<'ctx, O> {
 }
 
 impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
+    fn dbg_name(&mut self) -> &'static str {
+        core::mem::replace(&mut self.next_debug_name, "<unknown>")
+    }
+
     pub fn add_watch<F>(&mut self, f: F)
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
-        Watch::spawn(self, f);
+        let dbg_name = self.dbg_name();
+        Watch::spawn(self, dbg_name, f);
     }
 
     pub fn add_watch_might_add_watcher<F, T>(&mut self, f: F)
@@ -81,7 +89,8 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
         T: 'ctx + WatcherHolder<'ctx, O>,
         T::Content: crate::Watcher<'ctx, O>,
     {
-        Watch::spawn_might_add_watcher(self, f);
+        let debug_name = self.dbg_name();
+        Watch::spawn_might_add_watcher(self, debug_name, f);
     }
 
     pub fn add_watcher<T>(&mut self, holder: &T)
@@ -101,8 +110,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
         if let Some(mut frame_limit) = self.frame_limit {
             while !self.next_frame.empty() {
                 if frame_limit == 0 {
-                    let current_watch_names = "TODO";
-                    //self.back_frame.debug_names();
+                    let current_watch_names = self.next_frame.debug_names();
                     panic!(
                         "Updating a WatchContext exceeded it's \
                         limit for iteration.  This usually means there is a \
