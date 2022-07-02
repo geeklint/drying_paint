@@ -5,16 +5,14 @@ use {
     alloc::sync::{Arc, Weak},
     core::{
         cell::Cell,
-        fmt,
-        mem::{self, size_of},
-        ptr,
+        fmt, mem, ptr,
         sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
     },
 };
 
 use super::{WatchArg, WatchedMeta};
 
-const FLAG_COUNT: usize = size_of::<usize>() * 8;
+const FLAG_COUNT: usize = usize::BITS as usize;
 
 pub(crate) struct SyncContext<'ctx, O: ?Sized> {
     flag: Arc<AtomicUsize>,

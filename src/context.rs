@@ -79,6 +79,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
         T: 'ctx + WatcherHolder<'ctx, O>,
+        T::Content: crate::Watcher<'ctx, O>,
     {
         Watch::spawn_might_add_watcher(self, f);
     }
@@ -86,6 +87,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
     pub fn add_watcher<T>(&mut self, holder: &T)
     where
         T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
+        T::Content: crate::Watcher<'ctx, O>,
     {
         crate::watcher::init_watcher(self, holder);
     }

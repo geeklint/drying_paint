@@ -112,6 +112,7 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
     ) where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
         T: 'ctx + WatcherHolder<'ctx, O>,
+        T::Content: crate::Watcher<'ctx, O>,
     {
         let update_fn = {
             move |ctx: &mut WatchContext<'ctx, O>, watch: &Self| {

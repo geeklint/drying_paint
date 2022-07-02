@@ -28,7 +28,8 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
     where
         Self: WatcherInit<'static, T, DefaultOwner>,
         F: 'static + Fn(&mut T) -> Option<W>,
-        W: 'static + WatcherHolder<'static, DefaultOwner>;
+        W: 'static + WatcherHolder<'static, DefaultOwner>,
+        W::Content: Watcher<'static, DefaultOwner>;
 
     /// Use this to set up a function which should be re-run whenever watched
     /// values referenced inside change.
@@ -39,7 +40,8 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
     fn watch_for_new_child_explicit<F, W>(&mut self, func: F)
     where
         F: 'static + Fn(WatchArg<'_, 'ctx, O>, &mut T) -> Option<W>,
-        W: 'ctx + WatcherHolder<'ctx, O>;
+        W: 'ctx + WatcherHolder<'ctx, O>,
+        W::Content: Watcher<'ctx, O>;
 
     /*
         /// Watches have a debug name used in some error messages.  It defaults to
@@ -52,7 +54,7 @@ pub trait WatcherInit<'ctx, T: ?Sized, O: ?Sized = DefaultOwner> {
 }
 
 pub trait WatcherHolder<'ctx, O: ?Sized>: Clone {
-    type Content: ?Sized + Watcher<'ctx, O>;
+    type Content: ?Sized;
 
     fn get_mut<F, R>(&self, owner: &mut O, f: F) -> Option<R>
     where
@@ -79,6 +81,7 @@ pub(crate) fn init_watcher<'ctx, T, O>(
     holder: &T,
 ) where
     T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
+    T::Content: Watcher<'ctx, O>,
     O: ?Sized,
 {
     T::Content::init(WatcherInitImpl { ctx, path: holder });
@@ -95,7 +98,6 @@ impl<'ctx, Base, Map, Res: ?Sized, Owner: ?Sized> WatcherHolder<'ctx, Owner>
 where
     Base: WatcherHolder<'ctx, Owner>,
     Map: Clone + Fn(&mut Base::Content) -> &mut Res,
-    Res: Watcher<'ctx, Owner>,
 {
     type Content = Res;
 
@@ -150,6 +152,7 @@ where
         Self: WatcherInit<'static, Content, DefaultOwner>,
         F: 'static + Fn(&mut Content) -> Option<T>,
         T: 'static + WatcherHolder<'static, DefaultOwner>,
+        T::Content: Watcher<'static, DefaultOwner>,
     {
         self.watch_for_new_child_explicit(move |arg, content| {
             arg.use_as_current(|| func(content))
@@ -172,6 +175,7 @@ where
     where
         F: 'static + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content) -> Option<T>,
         T: 'ctx + WatcherHolder<'ctx, Owner>,
+        T::Content: Watcher<'ctx, Owner>,
     {
         let current_path = self.path.clone();
         self.ctx.add_watch_might_add_watcher(move |owner, arg| {
