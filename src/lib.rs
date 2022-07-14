@@ -59,7 +59,7 @@
 extern crate alloc;
 
 mod trigger;
-pub use trigger::WatchArg;
+pub use trigger::{RawWatchArg, WatchArg};
 use trigger::{Watch, WatchSet};
 
 mod context;

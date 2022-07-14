@@ -9,7 +9,7 @@ use {
     core::{cell::Cell, mem},
 };
 
-use crate::{FrameInfo, WatchContext, WatcherHolder};
+use crate::{FrameInfo, WatchContext};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
@@ -75,8 +75,26 @@ mod watcharg_current {
     }
 }
 
-type WatchFn<'ctx, O> =
-    dyn 'ctx + Fn(&mut WatchContext<'ctx, O>, &Watch<'ctx, O>);
+pub struct RawWatchArg<'a, 'ctx, O: ?Sized> {
+    ctx: &'a mut WatchContext<'ctx, O>,
+    watch: &'a Watch<'ctx, O>,
+}
+
+impl<'a, 'ctx, O: ?Sized> RawWatchArg<'a, 'ctx, O> {
+    pub fn context(&mut self) -> &mut WatchContext<'ctx, O> {
+        &mut self.ctx
+    }
+
+    pub fn as_owner_and_arg(&mut self) -> (&mut O, WatchArg<'_, 'ctx, O>) {
+        let Self { ctx, watch } = self;
+        let WatchContext {
+            owner, frame_info, ..
+        } = ctx;
+        (owner, WatchArg { watch, frame_info })
+    }
+}
+
+type WatchFn<'ctx, O> = dyn 'ctx + Fn(RawWatchArg<'_, 'ctx, O>);
 
 pub(crate) struct Watch<'ctx, O: ?Sized>(Rc<WatchData<WatchFn<'ctx, O>>>);
 
@@ -87,50 +105,13 @@ impl<'ctx, O: ?Sized> Clone for Watch<'ctx, O> {
 }
 
 impl<'ctx, O: ?Sized> Watch<'ctx, O> {
-    pub(crate) fn spawn<F>(
+    pub(crate) fn spawn_raw<F>(
         ctx: &mut WatchContext<'ctx, O>,
         debug_name: &'static str,
-        func: F,
+        update_fn: F,
     ) where
-        F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
+        F: 'ctx + Fn(RawWatchArg<'_, 'ctx, O>),
     {
-        let update_fn = {
-            move |ctx: &mut WatchContext<'ctx, O>, watch: &Self| {
-                let WatchContext {
-                    owner, frame_info, ..
-                } = ctx;
-                func(owner, WatchArg { watch, frame_info });
-            }
-        };
-        let this = Watch(Rc::new(WatchData {
-            update_fn,
-            debug_name,
-            cycle: Cell::new(0),
-        }));
-        this.get_ref().execute(ctx);
-    }
-
-    pub(crate) fn spawn_might_add_watcher<F, T>(
-        ctx: &mut WatchContext<'ctx, O>,
-        debug_name: &'static str,
-        func: F,
-    ) where
-        F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
-        T: 'ctx + WatcherHolder<'ctx, O>,
-        T::Content: crate::Watcher<'ctx, O>,
-    {
-        let update_fn = {
-            move |ctx: &mut WatchContext<'ctx, O>, watch: &Self| {
-                let WatchContext {
-                    owner, frame_info, ..
-                } = ctx;
-                if let Some(watcher) =
-                    func(owner, WatchArg { watch, frame_info })
-                {
-                    ctx.add_watcher(&watcher);
-                }
-            }
-        };
         let this = Watch(Rc::new(WatchData {
             update_fn,
             debug_name,
@@ -163,7 +144,11 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
     fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
         if self.cycle == self.watch.0.cycle.get() {
             self.watch.0.cycle.set(self.cycle + 1);
-            (self.watch.0.update_fn)(ctx, &self.watch);
+            let raw_arg = RawWatchArg {
+                ctx,
+                watch: &self.watch,
+            };
+            (self.watch.0.update_fn)(raw_arg);
         }
     }
 }

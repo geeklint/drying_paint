@@ -10,7 +10,9 @@ use {
     core::any::Any,
 };
 
-use crate::{sync::SyncContext, Watch, WatchArg, WatchSet, WatcherHolder};
+use crate::{
+    sync::SyncContext, RawWatchArg, Watch, WatchArg, WatchSet, WatcherHolder,
+};
 
 pub(crate) struct FrameInfo<'ctx, O: ?Sized> {
     pub(crate) id: u8,
@@ -75,22 +77,37 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
         core::mem::replace(&mut self.next_debug_name, "<unknown>")
     }
 
-    pub fn add_watch<F>(&mut self, f: F)
+    pub fn add_watch<F>(&mut self, func: F)
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>),
     {
         let dbg_name = self.dbg_name();
-        Watch::spawn(self, dbg_name, f);
+        self.add_watch_raw(dbg_name, move |mut raw_arg| {
+            let (owner, arg) = raw_arg.as_owner_and_arg();
+            func(owner, arg);
+        });
     }
 
-    pub fn add_watch_might_add_watcher<F, T>(&mut self, f: F)
+    pub fn add_watch_might_add_watcher<F, T>(&mut self, func: F)
     where
         F: 'ctx + Fn(&mut O, WatchArg<'_, 'ctx, O>) -> Option<T>,
         T: 'ctx + WatcherHolder<'ctx, O>,
         T::Content: crate::Watcher<'ctx, O>,
     {
         let debug_name = self.dbg_name();
-        Watch::spawn_might_add_watcher(self, debug_name, f);
+        self.add_watch_raw(debug_name, move |mut raw_arg| {
+            let (owner, arg) = raw_arg.as_owner_and_arg();
+            if let Some(watcher) = func(owner, arg) {
+                raw_arg.context().add_watcher(&watcher);
+            }
+        });
+    }
+
+    pub fn add_watch_raw<F>(&mut self, debug_name: &'static str, f: F)
+    where
+        F: 'ctx + Fn(RawWatchArg<'_, 'ctx, O>),
+    {
+        Watch::spawn_raw(self, debug_name, f)
     }
 
     pub fn add_watcher<T>(&mut self, holder: &T)
