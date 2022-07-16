@@ -56,20 +56,17 @@ mod watcharg_current {
             })
         }
 
-        pub fn try_with_current<
+        pub fn try_with_current<F>(f: F) -> Option<()>
+        where
             F: FnOnce(WatchArg<'_, 'static, DefaultOwner>),
-        >(
-            f: F,
-        ) -> Option<()> {
+        {
             CURRENT_ARG.with(|cell| {
                 // TODO: re-entrence?
                 let owned = cell.take()?;
-                let ret = {
-                    let OwnedWatchArg(ref watch, ref frame_info) = owned;
-                    f(WatchArg { watch, frame_info })
-                };
+                let OwnedWatchArg(ref watch, ref frame_info) = owned;
+                f(WatchArg { watch, frame_info });
                 cell.set(Some(owned));
-                Some(ret)
+                Some(())
             })
         }
     }

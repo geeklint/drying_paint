@@ -1,0 +1,45 @@
+/* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
+/* Copyright © 2021 Violet Leonard */
+
+use drying_paint::{WatchedCellCore, WatchedCore};
+
+fn function_exists<F>(_f: F) {}
+
+#[allow(dead_code, clippy::extra_unused_lifetimes)]
+fn test_no_missing_fns<'ctx>() {
+    function_exists(<WatchedCore<'ctx, f32>>::get_mut);
+    function_exists(<WatchedCore<'static, f32>>::get_mut_auto);
+    function_exists(<WatchedCore<'ctx, f32>>::get_mut_external);
+
+    function_exists(<WatchedCore<'ctx, f32>>::replace);
+    function_exists(<WatchedCore<'static, f32>>::replace_auto);
+    function_exists(<WatchedCore<'ctx, f32>>::replace_external);
+
+    function_exists(<WatchedCore<'ctx, f32>>::take);
+    function_exists(<WatchedCore<'static, f32>>::take_auto);
+    function_exists(<WatchedCore<'ctx, f32>>::take_external);
+
+    function_exists(<WatchedCore<'ctx, f32>>::set_if_neq);
+    function_exists(<WatchedCore<'static, f32>>::set_if_neq_auto);
+    function_exists(<WatchedCore<'ctx, f32>>::set_if_neq_external);
+
+    function_exists(<WatchedCellCore<'ctx, f32>>::get_mut);
+    function_exists(<WatchedCellCore<'static, f32>>::get_mut_auto);
+    function_exists(<WatchedCellCore<'ctx, f32>>::get_mut_external);
+
+    function_exists(<WatchedCellCore<'ctx, f32>>::replace);
+    function_exists(<WatchedCellCore<'static, f32>>::replace_auto);
+    function_exists(<WatchedCellCore<'ctx, f32>>::replace_external);
+
+    function_exists(<WatchedCellCore<'ctx, f32>>::take);
+    function_exists(<WatchedCellCore<'static, f32>>::take_auto);
+    function_exists(<WatchedCellCore<'ctx, f32>>::take_external);
+
+    function_exists(<WatchedCellCore<'ctx, f32>>::set);
+    function_exists(<WatchedCellCore<'static, f32>>::set_auto);
+    function_exists(<WatchedCellCore<'ctx, f32>>::set_external);
+
+    function_exists(<WatchedCellCore<'ctx, f32>>::set_if_neq);
+    function_exists(<WatchedCellCore<'static, f32>>::set_if_neq_auto);
+    function_exists(<WatchedCellCore<'ctx, f32>>::set_if_neq_external);
+}

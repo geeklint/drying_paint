@@ -100,6 +100,49 @@ impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
     pub fn replace(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>) -> T {
         core::mem::replace(self.get_mut(ctx), value)
     }
+
+    pub fn replace_external(&mut self, value: T) -> T {
+        core::mem::replace(self.get_mut_external(), value)
+    }
+
+    /// Takes the wrapped value, leaving `Default::default()` in its place,
+    /// and notifies watchers that the value has changed.
+    pub fn take(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> T
+    where
+        T: Default,
+    {
+        core::mem::take(self.get_mut(ctx))
+    }
+
+    pub fn take_external(&mut self) -> T
+    where
+        T: Default,
+    {
+        core::mem::take(self.get_mut_external())
+    }
+
+    /// This function provides a way to set a value for a watched value
+    /// only if is has changed.  This is useful for cases where setting a
+    /// value would otherwise cause an infinite loop.
+    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>)
+    where
+        T: PartialEq,
+    {
+        if self.value != value {
+            self.value = value;
+            self.meta.trigger(ctx);
+        }
+    }
+
+    pub fn set_if_neq_external(&mut self, value: T)
+    where
+        T: PartialEq,
+    {
+        if self.value != value {
+            self.value = value;
+            self.meta.trigger_external();
+        }
+    }
 }
 
 impl<'ctx, T: ?Sized, O: ?Sized> WatchedCore<'ctx, T, O> {
@@ -141,34 +184,28 @@ impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
         self.meta.watched_auto();
         &mut self.value
     }
-}
 
-impl<'ctx, T: Default, O: ?Sized> WatchedCore<'ctx, T, O> {
-    /// Takes the wrapped value, leaving `Default::default()` in its place,
-    /// and notifies watchers that the value has changed.
-    pub fn take(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> T {
-        core::mem::take(self.get_mut(ctx))
+    pub fn replace_auto(&mut self, value: T) -> T
+    where
+        T: Sized,
+    {
+        core::mem::replace(self.get_mut_auto(), value)
     }
-}
 
-impl<'ctx, T: PartialEq, O: ?Sized> WatchedCore<'ctx, T, O> {
+    pub fn take_auto(&mut self) -> T
+    where
+        T: Default,
+    {
+        core::mem::take(self.get_mut_auto())
+    }
+
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
-    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>) {
-        if self.value != value {
-            self.value = value;
-            self.meta.trigger(ctx);
-        }
-    }
-}
-
-#[cfg(feature = "std")]
-impl<T: PartialEq> WatchedCore<'static, T, DefaultOwner> {
-    /// This function provides a way to set a value for a watched value
-    /// only if is has changed.  This is useful for cases where setting a
-    /// value would otherwise cause an infinite loop.
-    pub fn set_if_neq_auto(&mut self, value: T) {
+    pub fn set_if_neq_auto(&mut self, value: T)
+    where
+        T: PartialEq + Sized,
+    {
         if self.value != value {
             self.value = value;
             self.meta.trigger_auto();
@@ -208,22 +245,14 @@ impl<'ctx, T: ?Sized, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         self.value.get_mut()
     }
 
-    /// Treat this WatchedCell as watched, without fetching the actual value.
-    pub fn watched(&self, ctx: WatchArg<'_, 'ctx, O>) {
-        self.meta.watched(ctx);
-    }
-}
-
-#[cfg(feature = "std")]
-impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
-    pub fn get_mut_auto(&mut self) -> &mut T {
-        self.meta.trigger_auto();
-        self.meta.watched_auto();
+    pub fn get_mut_external(&mut self) -> &mut T {
+        self.meta.trigger_external();
         self.value.get_mut()
     }
 
-    pub fn watched_auto(&self) {
-        self.meta.watched_auto();
+    /// Treat this WatchedCell as watched, without fetching the actual value.
+    pub fn watched(&self, ctx: WatchArg<'_, 'ctx, O>) {
+        self.meta.watched(ctx);
     }
 }
 
@@ -236,15 +265,36 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         }
     }
 
+    /// Unwraps the WatchedCell, returning the contained value
+    pub fn into_inner(self) -> T {
+        self.value.into_inner()
+    }
+
+    /// Returns a copy of the watched value
+    pub fn get(&self, ctx: WatchArg<'_, 'ctx, O>) -> T
+    where
+        T: Copy,
+    {
+        self.meta.watched(ctx);
+        self.value.get()
+    }
+
+    pub fn get_unwatched(&self) -> T
+    where
+        T: Copy,
+    {
+        self.value.get()
+    }
+
     /// Sets the watched value
     pub fn set(&self, value: T, ctx: WatchArg<'_, 'ctx, O>) {
         self.meta.trigger(ctx);
         self.value.set(value);
     }
 
-    /// Unwraps the WatchedCell, returning the contained value
-    pub fn into_inner(self) -> T {
-        self.value.into_inner()
+    pub fn set_external(&self, value: T) {
+        self.meta.trigger_external();
+        self.value.set(value);
     }
 
     /// Replaces the contained value and returns the previous value
@@ -253,56 +303,101 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         self.meta.watched(ctx);
         self.value.replace(value)
     }
-}
 
-#[cfg(feature = "std")]
-impl<T> WatchedCellCore<'static, T, DefaultOwner> {
-    pub fn set_auto(&self, value: T) {
-        self.meta.trigger_auto();
-        self.value.set(value);
-    }
-
-    pub fn replace_auto(&self, value: T) -> T {
-        self.meta.trigger_auto();
-        self.meta.watched_auto();
+    pub fn replace_external(&self, value: T) -> T {
+        self.meta.trigger_external();
         self.value.replace(value)
     }
-}
 
-impl<'ctx, T: Copy, O: ?Sized> WatchedCellCore<'ctx, T, O> {
-    /// Returns a copy of the watched value
-    pub fn get(&self, ctx: WatchArg<'_, 'ctx, O>) -> T {
-        self.meta.watched(ctx);
-        self.value.get()
-    }
-
-    pub fn get_unwatched(&self) -> T {
-        self.value.get()
-    }
-}
-
-#[cfg(feature = "std")]
-impl<T: Copy> WatchedCellCore<'static, T, DefaultOwner> {
-    pub fn get_auto(&self) -> T {
-        self.meta.watched_auto();
-        self.value.get()
-    }
-}
-
-impl<'ctx, T: Default, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     /// Takes the watched value, leaving `Default::default()` in its place
-    pub fn take(&self, ctx: WatchArg<'_, 'ctx, O>) -> T {
+    pub fn take(&self, ctx: WatchArg<'_, 'ctx, O>) -> T
+    where
+        T: Default,
+    {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.take()
     }
+
+    pub fn take_external(&self) -> T
+    where
+        T: Default,
+    {
+        self.meta.trigger_external();
+        self.value.take()
+    }
+
+    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>)
+    where
+        T: Copy + PartialEq,
+    {
+        if self.value.get() != value {
+            self.set(value, ctx);
+        }
+    }
+
+    pub fn set_if_neq_external(&mut self, value: T)
+    where
+        T: Copy + PartialEq,
+    {
+        if self.value.get() != value {
+            self.set_external(value);
+        }
+    }
 }
 
 #[cfg(feature = "std")]
-impl<T: Default> WatchedCellCore<'static, T, DefaultOwner> {
-    pub fn take_auto(&self) -> T {
+impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
+    pub fn get_auto(&self) -> T
+    where
+        T: Sized + Copy,
+    {
+        self.meta.watched_auto();
+        self.value.get()
+    }
+
+    pub fn get_mut_auto(&mut self) -> &mut T {
+        self.meta.trigger_auto();
+        self.meta.watched_auto();
+        self.value.get_mut()
+    }
+
+    pub fn watched_auto(&self) {
+        self.meta.watched_auto();
+    }
+
+    pub fn set_auto(&self, value: T)
+    where
+        T: Sized,
+    {
+        self.meta.trigger_auto();
+        self.value.set(value);
+    }
+
+    pub fn replace_auto(&self, value: T) -> T
+    where
+        T: Sized,
+    {
+        self.meta.trigger_auto();
+        self.meta.watched_auto();
+        self.value.replace(value)
+    }
+
+    pub fn take_auto(&self) -> T
+    where
+        T: Default,
+    {
         self.meta.trigger_auto();
         self.meta.watched_auto();
         self.value.take()
+    }
+
+    pub fn set_if_neq_auto(&self, value: T)
+    where
+        T: Copy + PartialEq,
+    {
+        if self.value.get() != value {
+            self.set_auto(value);
+        }
     }
 }
