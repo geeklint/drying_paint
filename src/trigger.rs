@@ -121,7 +121,6 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
         WatchRef {
             watch: self.clone(),
             cycle: self.0.cycle.get(),
-            debug_name: self.0.debug_name,
         }
     }
 }
@@ -130,7 +129,6 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
 pub(crate) struct WatchRef<'ctx, O: ?Sized> {
     watch: Watch<'ctx, O>,
     cycle: usize,
-    debug_name: &'static str,
 }
 
 impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
@@ -301,7 +299,7 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
                 let mut node = &head.node;
                 loop {
                     names.extend(node.data.iter().filter_map(|bucket| {
-                        bucket.as_ref().map(|watch| watch.debug_name)
+                        bucket.as_ref().map(|watch| watch.watch.0.debug_name)
                     }));
                     node = if let Some(next) = &node.next {
                         next
