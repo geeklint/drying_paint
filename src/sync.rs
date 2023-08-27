@@ -139,7 +139,7 @@ impl SyncWatchedMeta {
     /// When run in a function designed to watch a value, will bind so that
     /// function will be re-run when a trigger associated with this
     /// AtomicWatchedMeta is invoked.
-    pub fn watched<'ctx, O: ?Sized>(&self, ctx: WatchArg<'_, 'ctx, O>) {
+    pub fn watched<O: ?Sized>(&self, ctx: WatchArg<'_, '_, O>) {
         if let Some(sctx) = ctx.frame_info.sync_context.upgrade() {
             if self.index.get() == usize::MAX {
                 let index = sctx.next_index.get();
@@ -253,15 +253,12 @@ pub struct WatchedReceiver<R: ?Sized> {
 }
 
 impl<R: ?Sized> WatchedReceiver<R> {
-    pub fn get<'ctx, O: ?Sized>(&self, ctx: WatchArg<'_, 'ctx, O>) -> &R {
+    pub fn get<O: ?Sized>(&self, ctx: WatchArg<'_, '_, O>) -> &R {
         self.meta.watched(ctx);
         &self.receiver
     }
 
-    pub fn get_mut<'ctx, O: ?Sized>(
-        &mut self,
-        ctx: WatchArg<'_, 'ctx, O>,
-    ) -> &mut R {
+    pub fn get_mut<O: ?Sized>(&mut self, ctx: WatchArg<'_, '_, O>) -> &mut R {
         self.meta.watched(ctx);
         &mut self.receiver
     }

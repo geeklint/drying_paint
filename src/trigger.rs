@@ -79,7 +79,7 @@ pub struct RawWatchArg<'a, 'ctx, O: ?Sized> {
 
 impl<'a, 'ctx, O: ?Sized> RawWatchArg<'a, 'ctx, O> {
     pub fn context(&mut self) -> &mut WatchContext<'ctx, O> {
-        &mut self.ctx
+        self.ctx
     }
 
     pub fn as_owner_and_arg(&mut self) -> (&mut O, WatchArg<'_, 'ctx, O>) {
