@@ -16,6 +16,9 @@ use crate::{
     RawWatchArg, WatchArg, WatchName, WatcherHolder,
 };
 
+#[cfg(all(feature = "std", doc))]
+use crate::Watched;
+
 pub(crate) struct FrameInfo<'ctx, O: ?Sized> {
     pub(crate) id: u8,
     pub(crate) post_set: Weak<WatchFrame<'ctx, O>>,
