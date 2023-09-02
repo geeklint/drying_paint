@@ -327,7 +327,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         self.value.take()
     }
 
-    pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>)
+    pub fn set_if_neq(&self, value: T, ctx: WatchArg<'_, 'ctx, O>)
     where
         T: Copy + PartialEq,
     {
@@ -336,7 +336,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         }
     }
 
-    pub fn set_if_neq_external(&mut self, value: T)
+    pub fn set_if_neq_external(&self, value: T)
     where
         T: Copy + PartialEq,
     {

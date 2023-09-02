@@ -125,7 +125,6 @@ impl<'ctx, O: ?Sized> Watch<'ctx, O> {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct WatchRef<'ctx, O: ?Sized> {
     watch: Watch<'ctx, O>,
     cycle: usize,
@@ -136,8 +135,12 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
         Rc::ptr_eq(&self.watch.0, &other.0)
     }
 
+    fn is_fresh(&self) -> bool {
+        self.cycle == self.watch.0.cycle.get()
+    }
+
     fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
-        if self.cycle == self.watch.0.cycle.get() {
+        if self.is_fresh() {
             self.watch.0.cycle.set(self.cycle + 1);
             let raw_arg = RawWatchArg {
                 ctx,
