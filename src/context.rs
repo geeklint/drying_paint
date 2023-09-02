@@ -128,7 +128,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
         let mut current_frame = core::mem::take(&mut self.other_frame);
         self.next_frame.swap(Cell::from_mut(&mut current_frame));
         if let Some(mut frame_limit) = self.frame_limit {
-            let panic_msg = 
+            let panic_msg =
                 "\nUpdating a WatchContext exceeded its limit for iteration.\nSee \
                 `WatchContext::set_frame_limit` for more information.\nThis usually \
                 means there are cyclical watch triggers."
@@ -136,7 +136,8 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
             #[cfg(do_cycle_debug)]
             let mut debug = crate::cycle_debug::CycleDiagnostic::new();
             while !current_frame.is_empty() {
-                #[cfg(do_cycle_debug)] {
+                #[cfg(do_cycle_debug)]
+                {
                     if frame_limit < 5 {
                         debug.track_frame(&current_frame);
                     }
