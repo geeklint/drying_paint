@@ -74,8 +74,8 @@ where
             while let Some(&[source, target]) = iter.next() {
                 write!(frame_debug, " trigger at ").ok();
                 self.write_edge_location(&mut frame_debug, source, target);
-                write!(frame_debug, "  {and_that} caused the").ok();
-                and_that = "and that";
+                write!(frame_debug, "  {and_that}caused the").ok();
+                and_that = "and that ";
             }
             writeln!(frame_debug, " first trigger").ok();
         }
