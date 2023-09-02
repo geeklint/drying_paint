@@ -27,8 +27,14 @@ jobs:
       run: cargo fmt --all -- --check
     - name: Clippy each feature set
       run: |
-        cargo clippy --all-targets --no-default-features
-        cargo clippy --all-targets --no-default-features --features "std"
+        DRYING_PAINT_WATCH_CYCLE_DEBUG=never \
+          cargo clippy --all-targets --no-default-features
+        DRYING_PAINT_WATCH_CYCLE_DEBUG=never \
+          cargo clippy --all-targets --no-default-features --features "std"
+        DRYING_PAINT_WATCH_CYCLE_DEBUG=always \
+          cargo clippy --all-targets --no-default-features
+        DRYING_PAINT_WATCH_CYCLE_DEBUG=always \
+          cargo clippy --all-targets --no-default-features --features "std"
     - name: Run tests
       run: cargo test --verbose --all-features
     - name: Validate documentation

@@ -58,33 +58,31 @@
 
 extern crate alloc;
 
-mod trigger;
-pub use trigger::{RawWatchArg, WatchArg};
-use trigger::{Watch, WatchSet};
-
 mod context;
-use context::FrameInfo;
-pub use context::{DefaultOwner, WatchContext};
-
+#[cfg(do_cycle_debug)]
+mod cycle_debug;
+mod queue;
+mod sync;
+mod trigger;
 mod watched_core;
-pub use watched_core::{WatchedCellCore, WatchedCore, WatchedMeta};
+mod watcher;
+
+pub use crate::{
+    context::{DefaultOwner, WatchContext},
+    queue::WatchedQueue,
+    sync::{
+        watched_channel, SendGuard, SyncTrigger, SyncWatchedMeta,
+        WatchedReceiver, WatchedSender,
+    },
+    trigger::{RawWatchArg, WatchArg, WatchName},
+    watched_core::{WatchedCellCore, WatchedCore, WatchedMeta},
+    watcher::{Watcher, WatcherHolder, WatcherInit},
+};
 
 #[cfg(feature = "std")]
 mod watched;
 #[cfg(feature = "std")]
-pub use watched::{Watched, WatchedCell};
-
-mod watcher;
-pub use watcher::{Watcher, WatcherHolder, WatcherInit};
-
-mod queue;
-pub use queue::WatchedQueue;
-
-mod sync;
-pub use sync::{
-    watched_channel, SendGuard, SyncTrigger, SyncWatchedMeta, WatchedReceiver,
-    WatchedSender,
-};
+pub use crate::watched::{Watched, WatchedCell};
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

@@ -3,11 +3,12 @@
 
 use {alloc::rc::Weak, core::cell::RefCell};
 
-use crate::{DefaultOwner, WatchArg, WatchContext};
+use crate::{DefaultOwner, WatchArg, WatchContext, WatchName};
 
 pub trait Watcher<'ctx, O: ?Sized = DefaultOwner> {
     fn init(init: impl WatcherInit<'ctx, Self, O>);
 
+    #[deprecated]
     fn debug_name() -> &'static str {
         core::any::type_name::<Self>()
     }
@@ -132,6 +133,7 @@ where
     }
 
     #[cfg(feature = "std")]
+    #[cfg_attr(do_cycle_debug, track_caller)]
     fn watch<F>(&mut self, func: F)
     where
         Self: WatcherInit<'static, Content, DefaultOwner>,
@@ -143,6 +145,7 @@ where
     }
 
     #[cfg(feature = "std")]
+    #[cfg_attr(do_cycle_debug, track_caller)]
     fn watch_for_new_child<F, T>(&mut self, func: F)
     where
         Self: WatcherInit<'static, Content, DefaultOwner>,
@@ -155,31 +158,38 @@ where
         });
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     fn watch_explicit<F>(&mut self, func: F)
     where
         F: 'ctx + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content),
     {
+        let debug_name = WatchName::from_caller();
         let current_path = self.path.clone();
-        self.ctx.next_debug_name = Content::debug_name();
-        self.ctx.add_watch(move |owner, arg| {
+        self.ctx.add_watch_raw(debug_name, move |mut raw_arg| {
+            let (owner, arg) = raw_arg.as_owner_and_arg();
             current_path.get_mut(owner, |item| {
                 func(arg, item);
             });
         });
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     fn watch_for_new_child_explicit<F, T>(&mut self, func: F)
     where
         F: 'static + Fn(WatchArg<'_, 'ctx, Owner>, &mut Content) -> Option<T>,
         T: 'ctx + WatcherHolder<'ctx, Owner>,
         T::Content: Watcher<'ctx, Owner>,
     {
+        let debug_name = WatchName::from_caller();
         let current_path = self.path.clone();
-        self.ctx.next_debug_name = Content::debug_name();
-        self.ctx.add_watch_might_add_watcher(move |owner, arg| {
-            current_path
+        self.ctx.add_watch_raw(debug_name, move |mut raw_arg| {
+            let (owner, arg) = raw_arg.as_owner_and_arg();
+            if let Some(watcher) = current_path
                 .get_mut(owner, |item| func(arg, item))
                 .flatten()
+            {
+                raw_arg.context().add_watcher(&watcher);
+            }
         });
     }
 }

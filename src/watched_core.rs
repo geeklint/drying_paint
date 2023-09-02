@@ -3,7 +3,10 @@
 
 use core::cell::Cell;
 
-use crate::{DefaultOwner, WatchArg, WatchSet};
+use crate::{
+    trigger::{TriggerReason, WatchArg, WatchSet},
+    DefaultOwner,
+};
 
 /// This provides the basic functionality behind watched values. You can use
 /// it to provide functionality using the watch system for cases where
@@ -18,6 +21,13 @@ impl<'ctx, O: ?Sized> Default for WatchedMeta<'ctx, O> {
         Self {
             watchers: WatchSet::default(),
         }
+    }
+}
+
+impl<'ctx, O: ?Sized> Drop for WatchedMeta<'ctx, O> {
+    #[cfg_attr(do_cycle_debug, track_caller)]
+    fn drop(&mut self) {
+        self.trigger_external();
     }
 }
 
@@ -38,12 +48,16 @@ impl<'ctx, O: ?Sized> WatchedMeta<'ctx, O> {
 
     /// Mark this value as having changed, so that watching functions will
     /// be marked as needing to be updated.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn trigger(&self, ctx: WatchArg<'_, 'ctx, O>) {
-        self.watchers.trigger_with_current(ctx.watch);
+        let reason = TriggerReason::from_caller().with_source(ctx.watch);
+        self.watchers.trigger_with_current(ctx.watch, reason);
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn trigger_external(&self) {
-        self.watchers.trigger_external();
+        let reason = TriggerReason::from_caller();
+        self.watchers.trigger_external(reason);
     }
 }
 
@@ -53,9 +67,15 @@ impl WatchedMeta<'static, DefaultOwner> {
         WatchArg::try_with_current(|arg| self.watched(arg));
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn trigger_auto(&self) {
-        if WatchArg::try_with_current(|arg| self.trigger(arg)).is_none() {
-            self.trigger_external();
+        let reason = TriggerReason::from_caller();
+        let found_current = WatchArg::try_with_current(|arg| {
+            let reason = reason.with_source(arg.watch);
+            self.watchers.trigger_with_current(arg.watch, reason)
+        });
+        if found_current.is_none() {
+            self.watchers.trigger_external(reason);
         }
     }
 }
@@ -97,16 +117,19 @@ impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// Takes the wrapped value, with a new one, returning the old value,
     /// without deinitializing either one, and notifies watchers that the
     /// value has changed.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>) -> T {
         core::mem::replace(self.get_mut(ctx), value)
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace_external(&mut self, value: T) -> T {
         core::mem::replace(self.get_mut_external(), value)
     }
 
     /// Takes the wrapped value, leaving `Default::default()` in its place,
     /// and notifies watchers that the value has changed.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> T
     where
         T: Default,
@@ -114,6 +137,7 @@ impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
         core::mem::take(self.get_mut(ctx))
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take_external(&mut self) -> T
     where
         T: Default,
@@ -124,6 +148,7 @@ impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq(&mut self, value: T, ctx: WatchArg<'_, 'ctx, O>)
     where
         T: PartialEq,
@@ -134,6 +159,7 @@ impl<'ctx, T, O: ?Sized> WatchedCore<'ctx, T, O> {
         }
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq_external(&mut self, value: T)
     where
         T: PartialEq,
@@ -154,12 +180,14 @@ impl<'ctx, T: ?Sized, O: ?Sized> WatchedCore<'ctx, T, O> {
 
     /// Get a mutable referenced to the wrapped value, notifying
     /// watchers that the value has changed.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> &mut T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         &mut self.value
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut_external(&mut self) -> &mut T {
         self.meta.trigger_external();
         &mut self.value
@@ -179,12 +207,14 @@ impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
         &self.value
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut_auto(&mut self) -> &mut T {
         self.meta.trigger_auto();
         self.meta.watched_auto();
         &mut self.value
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace_auto(&mut self, value: T) -> T
     where
         T: Sized,
@@ -192,6 +222,7 @@ impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
         core::mem::replace(self.get_mut_auto(), value)
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take_auto(&mut self) -> T
     where
         T: Default,
@@ -202,6 +233,7 @@ impl<T: ?Sized> WatchedCore<'static, T, DefaultOwner> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq_auto(&mut self, value: T)
     where
         T: PartialEq + Sized,
@@ -239,12 +271,14 @@ impl<'ctx, T: ?Sized, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     ///
     /// This call borrows the WatchedCell mutably (at compile-time) which
     /// guarantees that we possess the only reference.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut(&mut self, ctx: WatchArg<'_, 'ctx, O>) -> &mut T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.get_mut()
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut_external(&mut self) -> &mut T {
         self.meta.trigger_external();
         self.value.get_mut()
@@ -287,29 +321,34 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
     }
 
     /// Sets the watched value
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set(&self, value: T, ctx: WatchArg<'_, 'ctx, O>) {
         self.meta.trigger(ctx);
         self.value.set(value);
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_external(&self, value: T) {
         self.meta.trigger_external();
         self.value.set(value);
     }
 
     /// Replaces the contained value and returns the previous value
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace(&self, value: T, ctx: WatchArg<'_, 'ctx, O>) -> T {
         self.meta.trigger(ctx);
         self.meta.watched(ctx);
         self.value.replace(value)
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace_external(&self, value: T) -> T {
         self.meta.trigger_external();
         self.value.replace(value)
     }
 
     /// Takes the watched value, leaving `Default::default()` in its place
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take(&self, ctx: WatchArg<'_, 'ctx, O>) -> T
     where
         T: Default,
@@ -319,6 +358,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         self.value.take()
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take_external(&self) -> T
     where
         T: Default,
@@ -327,6 +367,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         self.value.take()
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq(&self, value: T, ctx: WatchArg<'_, 'ctx, O>)
     where
         T: Copy + PartialEq,
@@ -336,6 +377,7 @@ impl<'ctx, T, O: ?Sized> WatchedCellCore<'ctx, T, O> {
         }
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq_external(&self, value: T)
     where
         T: Copy + PartialEq,
@@ -356,6 +398,7 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         self.value.get()
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut_auto(&mut self) -> &mut T {
         self.meta.trigger_auto();
         self.meta.watched_auto();
@@ -366,6 +409,7 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         self.meta.watched_auto();
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_auto(&self, value: T)
     where
         T: Sized,
@@ -374,6 +418,7 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         self.value.set(value);
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace_auto(&self, value: T) -> T
     where
         T: Sized,
@@ -383,6 +428,7 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         self.value.replace(value)
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take_auto(&self) -> T
     where
         T: Default,
@@ -392,6 +438,7 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         self.value.take()
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq_auto(&self, value: T)
     where
         T: Copy + PartialEq,

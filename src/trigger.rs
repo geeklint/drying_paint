@@ -5,15 +5,17 @@ use {
     alloc::{
         boxed::Box,
         rc::{Rc, Weak},
+        vec::Vec,
     },
     core::{cell::Cell, mem},
 };
 
-use crate::{FrameInfo, WatchContext};
+use crate::context::{FrameInfo, WatchContext};
 
 struct WatchData<F: ?Sized> {
     cycle: Cell<usize>,
-    debug_name: &'static str,
+    #[cfg_attr(not(do_cycle_debug), allow(dead_code))]
+    debug_name: WatchName,
     update_fn: F,
 }
 
@@ -26,6 +28,102 @@ impl<'a, 'ctx, O: ?Sized> Copy for WatchArg<'a, 'ctx, O> {}
 impl<'a, 'ctx, O: ?Sized> Clone for WatchArg<'a, 'ctx, O> {
     fn clone(&self) -> Self {
         *self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WatchName {
+    #[cfg(do_cycle_debug)]
+    pub(crate) inner: watch_name::Inner,
+}
+
+#[cfg(not(do_cycle_debug))]
+mod watch_name {
+    impl From<&'static str> for super::WatchName {
+        fn from(value: &'static str) -> Self {
+            let _unused = value;
+            Self {}
+        }
+    }
+
+    impl super::WatchName {
+        pub fn from_caller() -> Self {
+            Self {}
+        }
+    }
+}
+
+#[cfg(do_cycle_debug)]
+pub(crate) mod watch_name {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    pub(crate) enum Inner {
+        Name(&'static str),
+        SpawnLocation(&'static core::panic::Location<'static>),
+    }
+
+    impl From<&'static str> for super::WatchName {
+        fn from(value: &'static str) -> Self {
+            Self {
+                inner: Inner::Name(value),
+            }
+        }
+    }
+
+    impl super::WatchName {
+        #[track_caller]
+        pub fn from_caller() -> Self {
+            let loc = core::panic::Location::caller();
+            Self {
+                inner: Inner::SpawnLocation(loc),
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct TriggerReason {
+    #[cfg(do_cycle_debug)]
+    location: &'static core::panic::Location<'static>,
+    #[cfg(do_cycle_debug)]
+    source_watch: *const (),
+}
+
+#[cfg(not(do_cycle_debug))]
+impl TriggerReason {
+    pub fn from_caller() -> Self {
+        Self {}
+    }
+
+    pub fn with_source<O>(self, source_watch: &Watch<'_, O>) -> Self
+    where
+        O: ?Sized,
+    {
+        let _unused = source_watch;
+        Self {}
+    }
+}
+
+#[cfg(do_cycle_debug)]
+impl TriggerReason {
+    #[track_caller]
+    pub fn from_caller() -> Self {
+        let location = core::panic::Location::caller();
+        let source_watch = core::ptr::null();
+        Self {
+            location,
+            source_watch,
+        }
+    }
+
+    pub fn with_source<O>(self, source_watch: &Watch<'_, O>) -> Self
+    where
+        O: ?Sized,
+    {
+        let source_watch = Rc::as_ptr(&source_watch.0).cast();
+        Self {
+            source_watch,
+            ..self
+        }
     }
 }
 
@@ -104,7 +202,7 @@ impl<'ctx, O: ?Sized> Clone for Watch<'ctx, O> {
 impl<'ctx, O: ?Sized> Watch<'ctx, O> {
     pub(crate) fn spawn_raw<F>(
         ctx: &mut WatchContext<'ctx, O>,
-        debug_name: &'static str,
+        debug_name: WatchName,
         update_fn: F,
     ) where
         F: 'ctx + Fn(RawWatchArg<'_, 'ctx, O>),
@@ -151,6 +249,52 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
     }
 }
 
+pub(crate) struct TriggeredWatch<'ctx, O: ?Sized> {
+    watch: WatchRef<'ctx, O>,
+    #[cfg_attr(not(do_cycle_debug), allow(dead_code))]
+    reason: TriggerReason,
+}
+
+impl<'ctx, O: ?Sized> TriggeredWatch<'ctx, O> {
+    pub(crate) fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
+        self.watch.execute(ctx);
+    }
+}
+
+#[cfg(do_cycle_debug)]
+impl<'ctx, O: ?Sized> TriggeredWatch<'ctx, O> {
+    pub(crate) fn is_fresh(&self) -> bool {
+        self.watch.is_fresh()
+    }
+
+    pub(crate) fn order(&self) -> impl Ord {
+        (self.watch.watch.0.debug_name, self.reason)
+    }
+
+    pub(crate) fn watch_name(&self) -> WatchName {
+        self.watch.watch.0.debug_name
+    }
+
+    pub(crate) fn to_edge(&self) -> (*const (), *const ()) {
+        (
+            self.reason.source_watch,
+            Rc::as_ptr(&self.watch.watch.0).cast(),
+        )
+    }
+
+    pub(crate) fn trigger_location(
+        &self,
+    ) -> &'static core::panic::Location<'static> {
+        self.reason.location
+    }
+
+    pub(crate) fn clone_watch(&self) -> Watch<'ctx, O> {
+        self.watch.watch.clone()
+    }
+}
+
+pub(crate) type WatchFrame<'ctx, O> = Cell<Vec<TriggeredWatch<'ctx, O>>>;
+
 struct WatchSetNode<'ctx, O: ?Sized> {
     data: [Option<WatchRef<'ctx, O>>; 4], // TODO: analyse better len here?
     next: Option<Box<WatchSetNode<'ctx, O>>>,
@@ -167,7 +311,7 @@ impl<'ctx, O: ?Sized> Default for WatchSetNode<'ctx, O> {
 
 struct WatchSetHead<'ctx, O: ?Sized> {
     node: WatchSetNode<'ctx, O>,
-    target: Weak<WatchSet<'ctx, O>>,
+    target: Weak<WatchFrame<'ctx, O>>,
 }
 
 impl<'ctx, O: ?Sized> Default for WatchSetHead<'ctx, O> {
@@ -206,11 +350,11 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         ret
     }
 
-    pub fn empty(&self) -> bool {
-        self.with(|list| list.is_none())
-    }
-
-    pub(crate) fn add(&self, watch: WatchRef<'ctx, O>, target: &Weak<Self>) {
+    pub(crate) fn add(
+        &self,
+        watch: WatchRef<'ctx, O>,
+        target: &Weak<WatchFrame<'ctx, O>>,
+    ) {
         self.with(|list| {
             let head = list.get_or_insert_with(|| {
                 Box::new(WatchSetHead {
@@ -229,89 +373,41 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         });
     }
 
-    fn add_all<F>(&self, other: &WatchSet<'ctx, O>, mut filter: F)
+    fn trigger_filtered<F>(&self, reason: TriggerReason, mut filter: F)
     where
         F: FnMut(&WatchRef<'ctx, O>) -> bool,
     {
-        if let Some(other_head) = other.list.take() {
-            let target = &other_head.target;
-            let mut node = other_head.node;
-            loop {
-                for bucket in node.data.iter_mut() {
-                    if let Some(watch) = bucket.take() {
-                        if filter(&watch) {
-                            self.add(watch, target);
+        if let Some(head) = self.list.take() {
+            if let Some(target_box) = head.target.upgrade() {
+                let mut target = target_box.take();
+                let mut node = head.node;
+                loop {
+                    for bucket in node.data.iter_mut() {
+                        if let Some(watch) = bucket.take().filter(&mut filter)
+                        {
+                            target.push(TriggeredWatch { watch, reason })
                         }
                     }
-                }
-                node = if let Some(next) = node.next {
-                    *next
-                } else {
-                    break;
-                };
-            }
-        }
-    }
-
-    pub(crate) fn trigger_with_current(&self, current: &Watch<'ctx, O>) {
-        if let Some(target) = self
-            .with(|list| list.as_mut().and_then(|head| head.target.upgrade()))
-        {
-            target.add_all(self, |to_add| !to_add.watch_eq(current));
-        }
-    }
-
-    pub fn trigger_external(&self) {
-        if let Some(target) = self
-            .with(|list| list.as_mut().and_then(|head| head.target.upgrade()))
-        {
-            target.add_all(self, |_| true);
-        }
-    }
-
-    pub fn take(&self) -> Self {
-        Self {
-            list: Cell::new(self.list.take()),
-        }
-    }
-
-    pub fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
-        let mut node = if let Some(head) = self.list.take() {
-            head.node
-        } else {
-            return;
-        };
-        loop {
-            for bucket in node.data.iter_mut() {
-                if let Some(watch) = bucket.take() {
-                    watch.execute(ctx);
-                }
-            }
-            node = if let Some(next) = node.next {
-                *next
-            } else {
-                break;
-            }
-        }
-    }
-
-    pub fn debug_names(&self) -> alloc::string::String {
-        self.with(|list| {
-            let mut names = alloc::vec::Vec::new();
-            if let Some(head) = &list {
-                let mut node = &head.node;
-                loop {
-                    names.extend(node.data.iter().filter_map(|bucket| {
-                        bucket.as_ref().map(|watch| watch.watch.0.debug_name)
-                    }));
-                    node = if let Some(next) = &node.next {
-                        next
+                    node = if let Some(next) = node.next {
+                        *next
                     } else {
                         break;
                     };
                 }
+                target_box.set(target);
             }
-            names.join("\n  ")
-        })
+        }
+    }
+
+    pub(crate) fn trigger_with_current(
+        &self,
+        current: &Watch<'ctx, O>,
+        reason: TriggerReason,
+    ) {
+        self.trigger_filtered(reason, |to_add| !to_add.watch_eq(current));
+    }
+
+    pub fn trigger_external(&self, reason: TriggerReason) {
+        self.trigger_filtered(reason, |_| true);
     }
 }

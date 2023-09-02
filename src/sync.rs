@@ -10,7 +10,7 @@ use {
     },
 };
 
-use super::{WatchArg, WatchedMeta};
+use crate::{trigger::WatchArg, WatchedMeta};
 
 const FLAG_COUNT: usize = usize::BITS as usize;
 

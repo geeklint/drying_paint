@@ -3,7 +3,7 @@
 
 use {alloc::collections::VecDeque, core::cell::Cell};
 
-use crate::{DefaultOwner, WatchArg, WatchedMeta};
+use crate::{trigger::WatchArg, DefaultOwner, WatchedMeta};
 
 pub struct WatchedQueue<'ctx, T, O: ?Sized = DefaultOwner> {
     queue: Cell<VecDeque<T>>,
@@ -58,11 +58,13 @@ impl<'ctx, T, O: ?Sized> WatchedQueue<'ctx, T, O> {
         self.current_data.set(current_data);
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn push(&mut self, ctx: WatchArg<'_, 'ctx, O>, item: T) {
         self.queue.get_mut().push_back(item);
         self.current_meta.trigger(ctx);
     }
 
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn push_external(&mut self, item: T) {
         self.queue.get_mut().push_back(item);
         self.current_meta.trigger_external();

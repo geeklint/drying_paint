@@ -97,6 +97,7 @@ impl<T: PartialEq> Watched<T> {
     /// ctx.update();
     /// assert_eq!(keep_balanced.borrow().left, 21);
     /// ```
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
         wrapper.inner.set_if_neq_auto(value);
     }
@@ -111,6 +112,7 @@ impl<T: ?Sized> Deref for Watched<T> {
 }
 
 impl<T: ?Sized> DerefMut for Watched<T> {
+    #[cfg_attr(do_cycle_debug, track_caller)]
     fn deref_mut(&mut self) -> &mut T {
         self.inner.get_mut_auto()
     }
@@ -188,6 +190,7 @@ mod watched_ops {
             where
                 T: $imp<U> + ?Sized,
             {
+                #[cfg_attr(do_cycle_debug, track_caller)]
                 fn $method(&mut self, rhs: U) {
                     $imp::$method(self.inner.get_mut_auto(), rhs);
                 }
@@ -282,6 +285,7 @@ impl<T: ?Sized> WatchedCell<T> {
     ///
     /// This call borrows the WatchedCell mutably (at compile-time) which
     /// guarantees that we possess the only reference.
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn get_mut(&mut self) -> &mut T {
         self.inner.get_mut_auto()
     }
@@ -301,6 +305,7 @@ impl<T> WatchedCell<T> {
     }
 
     /// Sets the watched value
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn set(&self, value: T) {
         self.inner.set_auto(value);
     }
@@ -311,6 +316,7 @@ impl<T> WatchedCell<T> {
     }
 
     /// Replaces the contained value and returns the previous value
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn replace(&self, value: T) -> T {
         self.inner.replace_auto(value)
     }
@@ -325,6 +331,7 @@ impl<T: Copy> WatchedCell<T> {
 
 impl<T: Default> WatchedCell<T> {
     /// Takes the watched value, leaving `Default::default()` in its place
+    #[cfg_attr(do_cycle_debug, track_caller)]
     pub fn take(&self) -> T {
         self.inner.take_auto()
     }
