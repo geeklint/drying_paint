@@ -40,6 +40,7 @@ pub struct WatchContext<'ctx, O: ?Sized = DefaultOwner> {
     other_frame: Vec<TriggeredWatch<'ctx, O>>,
     sync_context: Rc<SyncContext<'ctx, O>>,
     pub(crate) frame_info: FrameInfo<'ctx, O>,
+    pub(crate) total_watch_count: usize,
     frame_limit: Option<usize>,
     pub(crate) owner: O,
 }
@@ -59,11 +60,13 @@ impl<'ctx, O> WatchContext<'ctx, O> {
             post_set: Rc::downgrade(&next_frame),
             sync_context: Rc::downgrade(&sync_context),
         };
+        let total_watch_count = 0;
         WatchContext {
             next_frame,
             other_frame,
             sync_context,
             frame_info,
+            total_watch_count,
             frame_limit,
             owner,
         }
@@ -111,6 +114,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
         F: 'ctx + Fn(RawWatchArg<'_, 'ctx, O>),
         N: Into<WatchName>,
     {
+        self.total_watch_count = self.total_watch_count.saturating_add(1);
         Watch::spawn_raw(self, debug_name.into(), f)
     }
 

@@ -7,7 +7,7 @@ use {
         rc::{Rc, Weak},
         vec::Vec,
     },
-    core::{cell::Cell, mem},
+    core::{cell::Cell, convert::TryFrom, mem},
 };
 
 use crate::context::{FrameInfo, WatchContext};
@@ -22,6 +22,7 @@ struct WatchData<F: ?Sized> {
 pub struct WatchArg<'a, 'ctx, O: ?Sized> {
     pub(crate) watch: &'a Watch<'ctx, O>,
     pub(crate) frame_info: &'a FrameInfo<'ctx, O>,
+    pub(crate) total_watch_count: usize,
 }
 
 impl<'a, 'ctx, O: ?Sized> Copy for WatchArg<'a, 'ctx, O> {}
@@ -133,20 +134,24 @@ mod watcharg_current {
 
     use super::*;
 
-    struct OwnedWatchArg(
-        Watch<'static, DefaultOwner>,
-        FrameInfo<'static, DefaultOwner>,
-    );
+    struct OwnedWatchArg {
+        watch: Watch<'static, DefaultOwner>,
+        frame_info: FrameInfo<'static, DefaultOwner>,
+        total_watch_count: usize,
+    }
 
     thread_local! {
-        static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = Cell::new(None);
+        static CURRENT_ARG: Cell<Option<OwnedWatchArg>> = const { Cell::new(None) };
     }
 
     impl<'a> WatchArg<'a, 'static, DefaultOwner> {
         pub fn use_as_current<R, F: FnOnce() -> R>(&self, f: F) -> R {
             CURRENT_ARG.with(|cell| {
-                let to_set =
-                    OwnedWatchArg(self.watch.clone(), self.frame_info.clone());
+                let to_set = OwnedWatchArg {
+                    watch: self.watch.clone(),
+                    frame_info: self.frame_info.clone(),
+                    total_watch_count: self.total_watch_count,
+                };
                 let prev = cell.replace(Some(to_set));
                 let ret = f();
                 cell.set(prev);
@@ -161,8 +166,16 @@ mod watcharg_current {
             CURRENT_ARG.with(|cell| {
                 // TODO: re-entrence?
                 let owned = cell.take()?;
-                let OwnedWatchArg(ref watch, ref frame_info) = owned;
-                f(WatchArg { watch, frame_info });
+                let OwnedWatchArg {
+                    ref watch,
+                    ref frame_info,
+                    total_watch_count,
+                } = owned;
+                f(WatchArg {
+                    watch,
+                    frame_info,
+                    total_watch_count,
+                });
                 cell.set(Some(owned));
                 Some(())
             })
@@ -183,9 +196,17 @@ impl<'a, 'ctx, O: ?Sized> RawWatchArg<'a, 'ctx, O> {
     pub fn as_owner_and_arg(&mut self) -> (&mut O, WatchArg<'_, 'ctx, O>) {
         let Self { ctx, watch } = self;
         let WatchContext {
-            owner, frame_info, ..
-        } = ctx;
-        (owner, WatchArg { watch, frame_info })
+            ref mut owner,
+            ref frame_info,
+            total_watch_count,
+            ..
+        } = **ctx;
+        let watch_arg = WatchArg {
+            watch,
+            frame_info,
+            total_watch_count,
+        };
+        (owner, watch_arg)
     }
 }
 
@@ -239,12 +260,39 @@ impl<'ctx, O: ?Sized> WatchRef<'ctx, O> {
 
     fn execute(self, ctx: &mut WatchContext<'ctx, O>) {
         if self.is_fresh() {
-            self.watch.0.cycle.set(self.cycle + 1);
+            self.watch.0.cycle.set(self.cycle.wrapping_add(1));
             let raw_arg = RawWatchArg {
                 ctx,
                 watch: &self.watch,
             };
             (self.watch.0.update_fn)(raw_arg);
+        }
+    }
+
+    fn sort_slot(
+        target: &mut Option<Self>,
+        held: &mut Option<Self>,
+        newest_cycle: usize,
+    ) {
+        let t_ptr = target
+            .as_ref()
+            .map(|w| Rc::as_ptr(&w.watch.0).cast::<()>())
+            .unwrap_or_else(core::ptr::null);
+        let h_ptr = held
+            .as_ref()
+            .map(|w| Rc::as_ptr(&w.watch.0).cast::<()>())
+            .unwrap_or_else(core::ptr::null);
+        match <*const ()>::cmp(&t_ptr, &h_ptr) {
+            core::cmp::Ordering::Greater => {
+                core::mem::swap(target, held);
+            }
+            core::cmp::Ordering::Less => (),
+            core::cmp::Ordering::Equal => {
+                if let Some(watch) = target.as_mut() {
+                    watch.cycle = newest_cycle;
+                }
+                held.take();
+            }
         }
     }
 }
@@ -312,6 +360,7 @@ impl<'ctx, O: ?Sized> Default for WatchSetNode<'ctx, O> {
 struct WatchSetHead<'ctx, O: ?Sized> {
     node: WatchSetNode<'ctx, O>,
     target: Weak<WatchFrame<'ctx, O>>,
+    nodes: u32,
 }
 
 impl<'ctx, O: ?Sized> Default for WatchSetHead<'ctx, O> {
@@ -319,6 +368,7 @@ impl<'ctx, O: ?Sized> Default for WatchSetHead<'ctx, O> {
         Self {
             node: WatchSetNode::default(),
             target: Weak::default(),
+            nodes: 1,
         }
     }
 }
@@ -354,23 +404,41 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
         &self,
         watch: WatchRef<'ctx, O>,
         target: &Weak<WatchFrame<'ctx, O>>,
+        total_watch_count: usize,
     ) {
+        let node_limit_small = u32::try_from(total_watch_count)
+            .unwrap_or(u32::MAX)
+            .saturating_add(1);
+        let node_limit_big = (total_watch_count.max(1).ilog2() + 1) * 64;
+        let node_limit = u32::min(node_limit_small, node_limit_big);
+        let mut squash = false;
         self.with(|list| {
             let head = list.get_or_insert_with(|| {
                 Box::new(WatchSetHead {
                     node: WatchSetNode::default(),
                     target: target.clone(),
+                    nodes: 1,
                 })
             });
-            for bucket in head.node.data.iter_mut() {
-                if bucket.is_none() {
-                    *bucket = Some(watch);
+            squash = head.node.data[0].is_none() && head.nodes > node_limit;
+            let new_cycle = watch.cycle;
+            let mut tmp = Some(watch);
+            for bucket in head.node.data.iter_mut().rev() {
+                WatchRef::sort_slot(bucket, &mut tmp, new_cycle);
+                if tmp.is_none() {
                     return;
                 }
             }
-            head.node.next = Some(Box::new(mem::take(&mut head.node)));
-            head.node.data[0] = Some(watch);
+            if let Some(watch) = tmp {
+                head.node.next = Some(Box::new(mem::take(&mut head.node)));
+                let [.., last] = &mut head.node.data;
+                *last = Some(watch);
+                head.nodes += 1;
+            }
         });
+        if squash {
+            self.squash();
+        }
     }
 
     fn trigger_filtered<F>(&self, reason: TriggerReason, mut filter: F)
@@ -409,5 +477,43 @@ impl<'ctx, O: ?Sized> WatchSet<'ctx, O> {
 
     pub fn trigger_external(&self, reason: TriggerReason) {
         self.trigger_filtered(reason, |_| true);
+    }
+
+    pub fn squash(&self) {
+        self.with(|list| {
+            let head = list.as_mut()?;
+            let node_size = head.node.data.len();
+            let node_count = usize::try_from(head.nodes).unwrap();
+            let mut refs =
+                alloc::vec::Vec::with_capacity(node_count * node_size);
+            let mut node = &mut head.node;
+            loop {
+                refs.extend(node.data.iter_mut().filter_map(Option::take));
+                if let Some(next) = &mut node.next {
+                    node = next;
+                } else {
+                    break;
+                }
+            }
+            // dedup keeps the first element, which has the most
+            // recent cycle since the sort is stable
+            refs.sort_by_key(|watch| Rc::as_ptr(&watch.watch.0));
+            refs.dedup_by_key(|watch| Rc::as_ptr(&watch.watch.0));
+            refs.retain(WatchRef::is_fresh);
+            let mut refs = refs.into_iter().map(Some).collect::<Vec<_>>();
+            let rem = refs.len() % node_size;
+            let (refs_head, rest) = refs.split_at_mut(rem);
+            head.node.data[(node_size - rem)..].swap_with_slice(refs_head);
+            let mut node_count = 1;
+            let mut node = &mut head.node;
+            for chunk in rest.chunks_exact_mut(node_size) {
+                node = node.next.get_or_insert_with(Box::default);
+                node.data.swap_with_slice(chunk);
+                node_count += 1;
+            }
+            node.next = None;
+            head.nodes = node_count;
+            Some(())
+        });
     }
 }
