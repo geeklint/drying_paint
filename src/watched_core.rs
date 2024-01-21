@@ -451,3 +451,107 @@ impl<T: ?Sized> WatchedCellCore<'static, T, DefaultOwner> {
         }
     }
 }
+
+pub trait WatchedValueCore<'ctx, O: ?Sized> {
+    type Value;
+
+    fn get(self, ctx: WatchArg<'_, 'ctx, O>) -> Self::Value;
+    fn get_unwatched(self) -> Self::Value;
+    fn map<F, U>(self, map_fn: F) -> impl WatchedValueCore<'ctx, O, Value = U>
+    where
+        Self: Sized,
+        F: FnOnce(Self::Value) -> U,
+    {
+        MapWatchedValue {
+            source: self,
+            map_fn,
+        }
+    }
+
+    /// implementation detail
+    #[doc(hidden)]
+    fn get_boxed(
+        self: alloc::boxed::Box<Self>,
+        ctx: WatchArg<'_, 'ctx, O>,
+    ) -> Self::Value {
+        self.get(ctx)
+    }
+
+    /// implementation detail
+    #[doc(hidden)]
+    fn get_unwatched_boxed(self: alloc::boxed::Box<Self>) -> Self::Value {
+        self.get_unwatched()
+    }
+}
+
+impl<'ctx, T, O> WatchedValueCore<'ctx, O> for alloc::boxed::Box<T>
+where
+    T: ?Sized + WatchedValueCore<'ctx, O>,
+    O: ?Sized,
+{
+    type Value = <T as WatchedValueCore<'ctx, O>>::Value;
+
+    fn get(self, ctx: WatchArg<'_, 'ctx, O>) -> Self::Value {
+        <T as WatchedValueCore<'ctx, O>>::get_boxed(self, ctx)
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        <T as WatchedValueCore<'ctx, O>>::get_unwatched_boxed(self)
+    }
+}
+
+impl<'a, 'ctx, O, T> WatchedValueCore<'ctx, O> for &'a WatchedCore<'ctx, T, O>
+where
+    O: ?Sized,
+    T: ?Sized,
+{
+    type Value = &'a T;
+
+    fn get(self, ctx: WatchArg<'_, 'ctx, O>) -> Self::Value {
+        self.get(ctx)
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        self.get_unwatched()
+    }
+}
+
+impl<'a, 'ctx, O, T> WatchedValueCore<'ctx, O>
+    for &'a WatchedCellCore<'ctx, T, O>
+where
+    O: ?Sized,
+    T: ?Sized + Copy,
+{
+    type Value = T;
+
+    fn get(self, ctx: WatchArg<'_, 'ctx, O>) -> Self::Value {
+        self.get(ctx)
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        self.get_unwatched()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MapWatchedValue<V, F> {
+    source: V,
+    map_fn: F,
+}
+
+impl<'ctx, O, T, U, V, F> WatchedValueCore<'ctx, O> for MapWatchedValue<V, F>
+where
+    O: ?Sized,
+    V: WatchedValueCore<'ctx, O, Value = T>,
+    F: FnOnce(T) -> U,
+{
+    type Value = U;
+
+    fn get(self, ctx: WatchArg<'_, 'ctx, O>) -> Self::Value {
+        (self.map_fn)(self.source.get(ctx))
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        (self.map_fn)(self.source.get_unwatched())
+    }
+}

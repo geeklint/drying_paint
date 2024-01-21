@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::{DefaultOwner, WatchedCellCore, WatchedCore};
+use crate::{DefaultOwner, WatchedCellCore, WatchedCore, WatchedValueCore};
 
 /// This represents some value which will be interesting to watch. Watcher
 /// functions that reference this value will be re-run when this value
@@ -121,6 +121,24 @@ impl<T: ?Sized> DerefMut for Watched<T> {
 impl<T: fmt::Debug + ?Sized> fmt::Debug for Watched<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.inner.get_auto(), f)
+    }
+}
+
+impl<'a, T> crate::WatchedValueCore<'static, DefaultOwner> for &'a Watched<T>
+where
+    T: ?Sized,
+{
+    type Value = &'a T;
+
+    fn get(
+        self,
+        ctx: crate::WatchArg<'_, 'static, DefaultOwner>,
+    ) -> Self::Value {
+        self.inner.get(ctx)
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        self.inner.get_unwatched()
     }
 }
 
@@ -346,6 +364,44 @@ impl<T: Copy> Clone for WatchedCell<T> {
 impl<T> From<T> for WatchedCell<T> {
     fn from(value: T) -> Self {
         Self::new(value)
+    }
+}
+
+impl<'a, T> WatchedValueCore<'static, DefaultOwner> for &'a WatchedCell<T>
+where
+    T: ?Sized + Copy,
+{
+    type Value = T;
+
+    fn get(
+        self,
+        ctx: crate::WatchArg<'_, 'static, DefaultOwner>,
+    ) -> Self::Value {
+        self.inner.get(ctx)
+    }
+
+    fn get_unwatched(self) -> Self::Value {
+        self.inner.get_unwatched()
+    }
+}
+
+pub trait WatchedValue:
+    crate::WatchedValueCore<'static, DefaultOwner>
+{
+    fn get_auto(self) -> Self::Value;
+}
+
+impl<W> WatchedValue for W
+where
+    W: crate::WatchedValueCore<'static, DefaultOwner>,
+{
+    fn get_auto(self) -> Self::Value {
+        let mut this = Some(self);
+        let mut result = None;
+        crate::trigger::WatchArg::try_with_current(|ctx| {
+            result = Some(this.take().unwrap().get(ctx));
+        });
+        result.unwrap_or_else(|| this.unwrap().get_unwatched())
     }
 }
 

@@ -75,7 +75,9 @@ pub use crate::{
         WatchedReceiver, WatchedSender,
     },
     trigger::{RawWatchArg, WatchArg, WatchName},
-    watched_core::{WatchedCellCore, WatchedCore, WatchedMeta},
+    watched_core::{
+        WatchedCellCore, WatchedCore, WatchedMeta, WatchedValueCore,
+    },
     watcher::{Watcher, WatcherHolder, WatcherInit},
 };
 
