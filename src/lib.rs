@@ -84,7 +84,7 @@ pub use crate::{
 #[cfg(feature = "std")]
 mod watched;
 #[cfg(feature = "std")]
-pub use crate::watched::{Watched, WatchedCell};
+pub use crate::watched::{Watched, WatchedCell, WatchedValue};
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
