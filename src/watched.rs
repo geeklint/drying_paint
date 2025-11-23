@@ -105,6 +105,12 @@ impl<T: ?Sized> Watched<T> {
     }
 }
 
+impl<T> From<T> for Watched<T> {
+    fn from(value: T) -> Self {
+        Self::new(value)
+    }
+}
+
 impl<T: ?Sized> Deref for Watched<T> {
     type Target = T;
 
