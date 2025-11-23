@@ -120,7 +120,7 @@ impl<'ctx, O: ?Sized> WatchContext<'ctx, O> {
 
     pub fn add_watcher<T>(&mut self, holder: &T)
     where
-        T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
+        T: 'ctx + WatcherHolder<'ctx, O>,
         T::Content: crate::Watcher<'ctx, O>,
     {
         crate::watcher::init_watcher(self, holder);

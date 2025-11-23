@@ -468,7 +468,7 @@ pub trait WatchedValueCore<'ctx, O: ?Sized> {
         }
     }
 
-    /// implementation detail
+    /// implementation detail so that Box<dyn WatchedValueCore> can work
     #[doc(hidden)]
     fn get_boxed(
         self: alloc::boxed::Box<Self>,
@@ -477,7 +477,7 @@ pub trait WatchedValueCore<'ctx, O: ?Sized> {
         self.get(ctx)
     }
 
-    /// implementation detail
+    /// implementation detail so that Box<dyn WatchedValueCore> can work
     #[doc(hidden)]
     fn get_unwatched_boxed(self: alloc::boxed::Box<Self>) -> Self::Value {
         self.get_unwatched()
@@ -516,11 +516,10 @@ where
     }
 }
 
-impl<'a, 'ctx, O, T> WatchedValueCore<'ctx, O>
-    for &'a WatchedCellCore<'ctx, T, O>
+impl<'ctx, O, T> WatchedValueCore<'ctx, O> for &WatchedCellCore<'ctx, T, O>
 where
     O: ?Sized,
-    T: ?Sized + Copy,
+    T: Copy,
 {
     type Value = T;
 

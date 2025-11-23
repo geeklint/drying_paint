@@ -19,6 +19,7 @@ fn main() {
         ),
         Err(VarError::NotPresent) => cfg!(debug_assertions),
     };
+    println!("cargo::rustc-check-cfg=cfg(do_cycle_debug)");
     if do_cycle_debug {
         println!("cargo:rustc-cfg=do_cycle_debug");
     }

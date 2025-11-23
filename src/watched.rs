@@ -367,9 +367,9 @@ impl<T> From<T> for WatchedCell<T> {
     }
 }
 
-impl<'a, T> WatchedValueCore<'static, DefaultOwner> for &'a WatchedCell<T>
+impl<T> WatchedValueCore<'static, DefaultOwner> for &WatchedCell<T>
 where
-    T: ?Sized + Copy,
+    T: Copy,
 {
     type Value = T;
 

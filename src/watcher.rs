@@ -76,7 +76,7 @@ pub(crate) fn init_watcher<'ctx, T, O>(
     ctx: &mut WatchContext<'ctx, O>,
     holder: &T,
 ) where
-    T: 'ctx + ?Sized + WatcherHolder<'ctx, O>,
+    T: 'ctx + WatcherHolder<'ctx, O>,
     T::Content: Watcher<'ctx, O>,
     O: ?Sized,
 {
