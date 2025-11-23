@@ -34,24 +34,15 @@ impl<T> Watched<T> {
     pub fn replace(this: &mut Self, value: T) -> T {
         std::mem::replace(&mut *this, value)
     }
-}
 
-impl<T: ?Sized> Watched<T> {
-    /// Get a referenced to the wrapped value, without binding the current
-    /// watch closure.
-    pub fn get_unwatched(this: &Self) -> &T {
-        this.inner.get_unwatched()
-    }
-}
-
-impl<T: Default> Watched<T> {
     /// Takes the wrapped value, leaving `Default::default()` in its place.
-    pub fn take(this: &mut Self) -> T {
+    pub fn take(this: &mut Self) -> T
+    where
+        T: Default,
+    {
         std::mem::take(&mut *this)
     }
-}
 
-impl<T: PartialEq> Watched<T> {
     /// This function provides a way to set a value for a watched value
     /// only if is has changed.  This is useful for cases where setting a
     /// value would otherwise cause an infinite loop.
@@ -98,8 +89,19 @@ impl<T: PartialEq> Watched<T> {
     /// assert_eq!(keep_balanced.borrow().left, 21);
     /// ```
     #[cfg_attr(do_cycle_debug, track_caller)]
-    pub fn set_if_neq(wrapper: &mut Watched<T>, value: T) {
+    pub fn set_if_neq(wrapper: &mut Watched<T>, value: T)
+    where
+        T: PartialEq,
+    {
         wrapper.inner.set_if_neq_auto(value);
+    }
+}
+
+impl<T: ?Sized> Watched<T> {
+    /// Get a referenced to the wrapped value, without binding the current
+    /// watch closure.
+    pub fn get_unwatched(this: &Self) -> &T {
+        this.inner.get_unwatched()
     }
 }
 
@@ -291,8 +293,7 @@ mod watched_ops {
 
 /// A Watched value which provides interior mutability.  This provides correct
 /// behavior (triggering watch functions when changed) where `Watched<Cell<T>>`
-/// would not, and should be slightly more performant than
-/// `RefCell<Watched<T>>`.
+/// would not, with lower overhead than `RefCell<Watched<T>>`.
 #[derive(Default)]
 pub struct WatchedCell<T: ?Sized> {
     inner: WatchedCellCore<'static, T, DefaultOwner>,
@@ -338,19 +339,21 @@ impl<T> WatchedCell<T> {
     pub fn replace(&self, value: T) -> T {
         self.inner.replace_auto(value)
     }
-}
 
-impl<T: Copy> WatchedCell<T> {
     /// Returns a copy of the watched value
-    pub fn get(&self) -> T {
+    pub fn get(&self) -> T
+    where
+        T: Copy,
+    {
         self.inner.get_auto()
     }
-}
 
-impl<T: Default> WatchedCell<T> {
     /// Takes the watched value, leaving `Default::default()` in its place
     #[cfg_attr(do_cycle_debug, track_caller)]
-    pub fn take(&self) -> T {
+    pub fn take(&self) -> T
+    where
+        T: Default,
+    {
         self.inner.take_auto()
     }
 }
