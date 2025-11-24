@@ -70,3 +70,11 @@ impl<'ctx, T, O: ?Sized> WatchedQueue<'ctx, T, O> {
         self.current_meta.trigger_external();
     }
 }
+
+#[cfg(feature = "std")]
+impl<T> WatchedQueue<'static, T, DefaultOwner> {
+    pub fn push_auto(&mut self, item: T) {
+        self.queue.get_mut().push_back(item);
+        self.current_meta.trigger_auto();
+    }
+}

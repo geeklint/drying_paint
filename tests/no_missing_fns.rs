@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: (Apache-2.0 OR MIT OR Zlib) */
 /* Copyright © 2021 Violet Leonard */
 
-use drying_paint::{WatchedCellCore, WatchedCore};
+use drying_paint::{WatchedCellCore, WatchedCore, WatchedQueue};
 
 fn function_exists<F>(_f: F) {}
 
@@ -61,4 +61,9 @@ fn test_no_missing_fns<'ctx>() {
     function_exists(<WatchedCellCore<'ctx, f32>>::set_if_neq_external);
     #[cfg(feature = "std")]
     function_exists(<WatchedCellCore<'static, f32>>::set_if_neq_auto);
+
+    function_exists(<WatchedQueue<'ctx, f32>>::push);
+    function_exists(<WatchedQueue<'ctx, f32>>::push_external);
+    #[cfg(feature = "std")]
+    function_exists(<WatchedQueue<'static, f32>>::push_auto);
 }
