@@ -51,10 +51,12 @@
 //! assert_eq!(content.borrow().dest, 43);
 //! ```
 
-#![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![no_std]
 //#![warn(missing_docs)]
 #![deny(rust_2018_idioms)]
-#![allow(clippy::needless_doctest_main)]
+
+#[cfg(any(test, feature = "std"))]
+extern crate std;
 
 extern crate alloc;
 
@@ -85,6 +87,10 @@ pub use crate::{
 mod watched;
 #[cfg(feature = "std")]
 pub use crate::watched::{Watched, WatchedCell, WatchedValue};
+
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

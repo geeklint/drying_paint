@@ -130,6 +130,8 @@ impl TriggerReason {
 
 #[cfg(feature = "std")]
 mod watcharg_current {
+    use std::thread_local;
+
     use crate::DefaultOwner;
 
     use super::*;
