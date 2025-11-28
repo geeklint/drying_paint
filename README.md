@@ -3,12 +3,13 @@
 [![Build Status](https://github.com/geeklint/drying_paint/workflows/Rust/badge.svg)](https://github.com/geeklint/drying_paint/actions)
 ![License](https://img.shields.io/crates/l/drying_paint?color=blueviolet)
 
+# drying_paint
+
 The name 'drying_paint' comes from the expression "watching paint dry".
 This module provides a system to "watch" some values for changes and run
 code whenever they change.
 
-The typical usage is as follows: you first define a structure to hold
-data, including some "watched" data.
+## Example
 
 ```rust
 use std::{rc::Rc, cell::RefCell};
